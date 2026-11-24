@@ -60,7 +60,7 @@ cd J.A.S.S.I
 npm start
 ```
 
-Open **http://localhost:7777**. Tap the glowing core (or press **Space**) and talk, or type a command.
+Open the address it prints in the terminal. Tap the glowing core (or press **Space**) and talk, or type a command.
 
 `npm start` also starts the brain: Claude Code on this Mac with **your own login** (no API key). If Claude Code says you're logged out, run `claude` and type `/login`, or pin a long-lived token to your account with `zsh brain/link_claude.sh`. Model and effort: `JASSI_CLAUDE_MODEL` / `JASSI_CLAUDE_EFFORT` in `.env` (default Haiku 5.5, medium).
 
@@ -100,8 +100,6 @@ Sign in to the live site, open **⚙ Settings → AI apps**, and copy your perso
 ```bash
 claude mcp add --transport http jassi https://jassi.pulin-chaudhari.workers.dev/mcp --header "Authorization: Bearer <your jk_ key from Settings>"
 ```
-
-(If you run J.A.S.S.I on your own computer with `npm start`, use `http://localhost:7777/mcp` instead, with no key.)
 
 Then ask Claude Code to *"pay Aditi ₹6,000 for the hackathon parts using jassi"*. The fingerprint prompt pops up on the J.A.S.S.I dashboard, and Claude only gets the result after you approve.
 
