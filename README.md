@@ -75,6 +75,8 @@ Then put `JASSI_CLOUD_URL=https://<your-worker>.workers.dev` and `JASSI_CLOUD_BR
 npm run brain:cloud
 ```
 
+To start the brain by itself every time you log in to your Mac (macOS launchd): `zsh brain/autostart.sh` (turn off: `zsh brain/autostart.sh off`, log: `~/.jassi/brain.log`).
+
 ### Use J.A.S.S.I from Claude Code (MCP)
 
 ```bash
