@@ -93,9 +93,13 @@ To start the brain by itself every time you log in to your Mac (macOS launchd): 
 
 ### Use J.A.S.S.I from Claude Code (MCP)
 
+Sign in to the live site, open **⚙ Settings → AI apps**, and copy your personal command. It looks like this:
+
 ```bash
-claude mcp add --transport http jassi http://localhost:7777/mcp
+claude mcp add --transport http jassi https://jassi.pulin-chaudhari.workers.dev/mcp --header "Authorization: Bearer <your jk_ key from Settings>"
 ```
+
+(If you run J.A.S.S.I on your own computer with `npm start`, use `http://localhost:7777/mcp` instead, with no key.)
 
 Then ask Claude Code to *"pay Aditi ₹6,000 for the hackathon parts using jassi"*. The fingerprint prompt pops up on the J.A.S.S.I dashboard, and Claude only gets the result after you approve.
 
