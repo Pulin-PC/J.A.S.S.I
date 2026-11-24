@@ -15,7 +15,10 @@ const inr = n => "₹" + Number(n).toLocaleString("en-IN");
 // kinds: read · self (changes only your own stuff) · link (fills an app, you tap the last button)
 //        send (reaches other people) · pay (moves money) · script (Code Mode: each inner call is checked again)
 // origin: you (voice/typed) · brain (AI acting for you) · content (AI after reading emails/pages) · mcp (another AI app)
-export function decide({ tool, kind, args = {}, amount = 0, origin = "you", blockedApps = [], spentToday = 0 }) {
+export function decide({ tool, kind, args = {}, amount = 0, origin = "you", blockedApps = [], spentToday = 0, limits = {} }) {
+  const L = { ...LIMITS, ...limits };
+  L.autoPayUnder = Math.min(Number(L.autoPayUnder) || 0, LIMITS.autoPayUnder);   // a user can make it stricter, never looser
+  L.dailyCap = Math.min(Number(L.dailyCap) || 0, 50000);
   if (!tool || !kind) return { level: "block", reason: "unknown tool" };
 
   if (tool === "open_app") {
@@ -25,11 +28,11 @@ export function decide({ tool, kind, args = {}, amount = 0, origin = "you", bloc
 
   if (kind === "pay") {
     if (!(amount > 0)) return { level: "block", reason: "amount must be more than ₹0" };
-    if (amount > LIMITS.hardMax) return { level: "block", reason: `over the ${inr(LIMITS.hardMax)} hard limit` };
+    if (amount > L.hardMax) return { level: "block", reason: `over the ${inr(L.hardMax)} hard limit` };
     if (origin === "content") return { level: "fingerprint", reason: "this payment came from something I read, not from you" };
-    if (amount >= LIMITS.autoPayUnder) return { level: "fingerprint", reason: `${inr(LIMITS.autoPayUnder)} or more needs your fingerprint` };
-    if (spentToday + amount > LIMITS.dailyCap) return { level: "fingerprint", reason: `this goes over today's ${inr(LIMITS.dailyCap)} limit` };
-    return { level: "auto", reason: `under ${inr(LIMITS.autoPayUnder)}` };
+    if (amount >= L.autoPayUnder) return { level: "fingerprint", reason: `${inr(L.autoPayUnder)} or more needs your fingerprint` };
+    if (spentToday + amount > L.dailyCap) return { level: "fingerprint", reason: `this goes over today's ${inr(L.dailyCap)} limit` };
+    return { level: "auto", reason: `under ${inr(L.autoPayUnder)}` };
   }
 
   if (kind === "send") {

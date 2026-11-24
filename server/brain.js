@@ -1,14 +1,31 @@
-// The thinking brain is Claude Code, running on your Mac (brain/bridge.js), the same way the JARVIS dashboard does it.
-// The server hands it a question over a private link, Claude Code acts through J.A.S.S.I's MCP tools
-// (so every action passes the same safety guard), and its answer comes back here. No API key anywhere.
-import { rt, TZ } from "./runtime.js";
+// The thinking brain is Claude Code, running on the owner's Mac (brain/bridge.js), the same way the JARVIS dashboard does it.
+// The server hands it a question, Claude Code acts through J.A.S.S.I's MCP tools (so every action passes the same
+// safety guard), and its answer comes back here. No API key anywhere.
+//   Local (Node):  rt.brainLink  -> the bridge connected to this server
+//   Cloudflare:    rt.brainAsk   -> the shared brain router (one bridge serves every signed-in user, each in their own Claude process)
+import { rt, TZ, today } from "./runtime.js";
 
+export const MEMBER_DAILY_QUESTIONS = 30;
 const waiting = new Map();
 let seq = 0;
 
-export const brainInfo = () => ({ on: (rt.brainLink?.count() || 0) > 0, model: "Claude Code" });
 export const tokenOk = t => !!rt.brainToken && t === rt.brainToken;
 export const bearer = h => String(h?.authorization || "").replace(/^Bearer\s+/i, "");
+
+function used() {
+  const s = rt.state;
+  if (!s.brainUsed || s.brainUsed.date !== today()) s.brainUsed = { date: today(), count: 0 };
+  return s.brainUsed;
+}
+const limit = () => (rt.me?.role === "owner" ? Infinity : MEMBER_DAILY_QUESTIONS);
+const left = () => Math.max(0, limit() - used().count);
+
+export async function brainInfo() {
+  let on = false;
+  try { on = rt.brainOnline ? await rt.brainOnline() : (rt.brainLink?.count() || 0) > 0; } catch {}
+  const l = left();
+  return { on, model: "Claude Code", left: l === Infinity ? null : l, limit: limit() === Infinity ? null : limit() };
+}
 
 // Tiny things answered here, instantly, brain or not.
 function quick(text) {
@@ -22,10 +39,16 @@ function quick(text) {
 export async function ask(text) {
   const q = quick(text);
   if (q) return { say: q, brain: "quick" };
-  if (!brainInfo().on) return { say: "My thinking brain is offline. Start Claude Code on the Mac with: npm run brain.", brain: "off" };
+  if (!(await brainInfo()).on) return { say: "My thinking brain is offline right now. Direct commands still work.", brain: "off" };
+  if (left() <= 0) return { say: `You've used today's ${MEMBER_DAILY_QUESTIONS} questions. Direct commands still work, and questions come back tomorrow.`, brain: "limit" };
+  used().count++; rt.save();
   const id = "q" + (++seq) + "_" + Date.now().toString(36);
   rt.brainCtx = { id, tainted: false };       // becomes tainted once the brain reads outside content
   rt.bus.emit("thinking", { id });
+  if (rt.brainAsk) {
+    const r = await rt.brainAsk({ id, text, now: Date.now() });
+    return { say: r.say || "Done.", brain: "claude-code" };
+  }
   return new Promise(resolve => {
     const timer = setTimeout(() => { waiting.delete(id); resolve({ say: "That took too long, so I stopped.", brain: "claude-code" }); }, 180000);
     waiting.set(id, say => { clearTimeout(timer); resolve({ say: say || "Done.", brain: "claude-code" }); });

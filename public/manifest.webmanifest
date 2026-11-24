@@ -1,0 +1,13 @@
+{
+  "name": "J.A.S.S.I",
+  "short_name": "J.A.S.S.I",
+  "description": "One assistant for all your apps, with a safety guard in code.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#01060c",
+  "theme_color": "#01060c",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

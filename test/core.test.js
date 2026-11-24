@@ -44,6 +44,9 @@ test("guard: money rules", () => {
   assert.equal(pay(300, { origin: "content" }), "fingerprint");
   assert.equal(pay(0), "block");
   assert.equal(pay(500000), "block");
+  // a user can tighten the auto-pay limit but never loosen it past ₹5,000
+  assert.equal(pay(1500, { limits: { autoPayUnder: 1000 } }), "fingerprint");
+  assert.equal(pay(6000, { limits: { autoPayUnder: 99999 } }), "fingerprint");
 });
 
 test("guard: sends need a yes, locked apps are blocked", () => {

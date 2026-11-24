@@ -79,9 +79,13 @@ export const TOOLS = [
     title: a => `Add "${a.title}" to calendar`,
     prep(a) { if (!a.when && (DEP.test(a.title) || /deliver/i.test(a.title)) && lastEta()) a.when = lastEta(); },
     check: a => need(a.when, "When is it? Say a time, like 'at 6 pm'."),
-    run(a) {
+    async run(a) {
       const ev = { id: uid("ev"), title: a.title, when: Number(a.when) };
       rt.state.events.push(ev); rt.save(); rt.bus.emit("calendar", ev);
+      if (rt.google?.has("calendar")) {
+        const g = await rt.google.addEvent(ev.title, ev.when);
+        return { say: `Added "${ev.title}" to your Google Calendar at ${hhmm(ev.when)}.`, ...ev, when_text: hhmm(ev.when), open: g.htmlLink, google: true };
+      }
       return { say: `Added "${ev.title}" at ${hhmm(ev.when)}.`, ...ev, when_text: hhmm(ev.when), ics: `/api/ics/${ev.id}` };
     },
   },
@@ -90,7 +94,11 @@ export const TOOLS = [
     description: "List today's and upcoming calendar events.",
     inputSchema: S({}),
     title: () => "Check calendar",
-    run() {
+    async run() {
+      if (rt.google?.has("calendar")) {
+        const evs = await rt.google.listEvents();
+        return { say: evs.length ? `Next on your Google Calendar: ${evs.slice(0, 3).map(e => `${e.title} at ${e.when_text}`).join(", ")}.` : "Your Google Calendar is free for now.", events: evs, google: true };
+      }
       const up = rt.state.events.filter(e => e.when > Date.now() - 3600e3).sort((a, b) => a.when - b.when);
       const meet = rt.demo.business.meetings_today.map(m => `${m.time} ${m.title}`);
       return { say: up.length ? `Next: ${up.slice(0, 3).map(e => `${e.title} at ${hhmm(e.when)}`).join(", ")}.` : `Nothing new. Business meetings today: ${meet.join(", ")}.`, events: up.map(e => ({ ...e, when_text: hhmm(e.when) })), meetings: rt.demo.business.meetings_today };
@@ -128,8 +136,9 @@ export const TOOLS = [
     inputSchema: S({}),
     title: () => "Read latest emails",
     untrusted: true,
-    run() {
-      const mails = rt.demo.emails.map(m => ({ ...m, warning: looksLikeInjection(m.subject + " " + m.body) ? "This email tries to give me orders. I ignored it." : "" }));
+    async run() {
+      const source = rt.google?.has("gmail") ? await rt.google.latestEmails() : rt.demo.emails;
+      const mails = source.map(m => ({ ...m, warning: looksLikeInjection(m.subject + " " + m.body) ? "This email tries to give me orders. I ignored it." : "" }));
       const bad = mails.filter(m => m.warning).length;
       return { say: `You have ${mails.length} new emails: ${mails.map(m => m.from + ", " + m.subject).join("; ")}.${bad ? ` One of them tried to trick me into paying. I ignored it.` : ""}`, emails: mails };
     },
@@ -283,8 +292,14 @@ export async function call(name, args = {}, { origin = "you", early = false, via
     throw e;
   }
   const title = tool.title(a);
+  // The app must be connected (Settings -> Apps). Clock, notes, browser and memory are always on.
+  const appId = name === "order_food" && /zomato/i.test(a.from || "") ? "zomato" : tool.app;
+  const app = rt.demo.apps.find(x => x.id === appId && x.tier !== "blocked");
+  if (app && !rt.state.settings?.apps?.[appId]) {
+    return { ok: false, level: "need", needApp: appId, say: `${app.name} isn't connected yet. Turn it on in Settings, under Apps.`, title, ...base };
+  }
   const amount = tool.amount ? tool.amount(a) : 0;
-  const d = decide({ tool: name, kind: tool.kind, args: a, amount, origin, blockedApps: rt.demo.blocked_apps, spentToday: rt.spentToday() });
+  const d = decide({ tool: name, kind: tool.kind, args: a, amount, origin, blockedApps: rt.demo.blocked_apps, spentToday: rt.spentToday(), limits: rt.state.settings || {} });
   rt.bus.emit("action", { phase: "start", title, ...base, level: d.level, reason: d.reason, at: t0 });
 
   if (d.level === "block") {

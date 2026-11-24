@@ -1,10 +1,15 @@
 // Host-neutral runtime. The tools, brain and MCP code only talk to `rt`, so the same code runs in
-// Node (server/store.js fills rt) and on Cloudflare (worker/index.js, a Durable Object, fills rt).
+// Node (server/store.js fills rt) and on Cloudflare (worker/index.js: one Durable Object per user fills rt).
+// On Cloudflare several users' objects can share one isolate, so `rt` resolves per request through
+// AsyncLocalStorage: withRt(userRuntime, fn) - nothing leaks between users.
+import { AsyncLocalStorage } from "node:async_hooks";
+
 export const TZ = "Asia/Kolkata";
 
-export const rt = {
+const als = new AsyncLocalStorage();
+const base = {
   demo: null,        // data/demo.json
-  state: null,       // { spent, payments, events, timers, outbox, lastOrder, orders }
+  state: null,       // see freshState()
   save() {},
   spentToday() { return 0; },
   addSpent() {},
@@ -12,15 +17,25 @@ export const rt = {
   bus: null,         // makeBus()
   diary() {},        // write one diary entry
   readDiary() { return []; },  // [{file, text}] for recent days
-  runScript: null,   // Code Mode runner (Node: sandbox; Cloudflare: off for free-form scripts)
+  diaryToday() { return []; },
+  runScript: null,   // free-form Code Mode (Node only)
+  google: null,      // real Google Calendar / Gmail (Cloudflare, when connected)
+  me: { name: "You", role: "owner" },
   host: "node",
 };
+export const rt = new Proxy(base, {
+  get(t, k) { const s = als.getStore(); return s && k in s ? s[k] : t[k]; },
+  set(t, k, v) { const s = als.getStore(); (s || t)[k] = v; return true; },
+});
+export const withRt = (ctx, fn) => als.run(ctx, fn);
 
 export const today = () => new Date().toLocaleDateString("en-CA", { timeZone: TZ });           // YYYY-MM-DD
 export const clock = () => new Date().toLocaleTimeString("en-GB", { timeZone: TZ, hour12: false }); // HH:MM:SS
 export const hhmm = ts => new Date(ts).toLocaleTimeString("en-IN", { timeZone: TZ, hour: "numeric", minute: "2-digit", hour12: true });
 
-export const freshState = () => ({ spent: { date: today(), amount: 0 }, payments: [], events: [], timers: [], outbox: [], lastOrder: null, orders: [] });
+export const DEFAULT_SETTINGS = { apps: {}, autoPayUnder: 5000, dailyCap: 10000 };
+export const freshState = () => ({ spent: { date: today(), amount: 0 }, payments: [], events: [], timers: [], outbox: [], lastOrder: null, orders: [],
+  settings: { ...DEFAULT_SETTINGS, apps: {} }, onboarded: false, brainUsed: { date: today(), count: 0 } });
 
 // ---------------------------------------------------------------- live event bus
 export function makeBus() {

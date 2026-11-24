@@ -49,4 +49,5 @@ export function diaryToday() {
 }
 
 Object.assign(rt, { demo, state, save, spentToday, addSpent, approvals, bus: _bus, diary, readDiary, diaryToday,
-  diaryLabel: "on this device · " + path.relative(ROOT, DIARY_DIR), host: "node" });
+  diaryLabel: "on this device · " + path.relative(ROOT, DIARY_DIR), host: "node",
+  me: { name: demo.user.name, role: "owner", local: true } });

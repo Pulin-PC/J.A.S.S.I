@@ -1,6 +1,6 @@
 // Host-neutral API routes (Node server and Cloudflare Durable Object both use this).
 // Live streams (/api/events, /api/brain/listen) and static files are handled by each host.
-import { rt } from "./runtime.js";
+import { rt, freshState } from "./runtime.js";
 import { call, stepToCall, TOOLS } from "./tools.js";
 import { buildScript, runPlan } from "./codemode.js";
 import { ask, answer, brainInfo, tokenOk, bearer } from "./brain.js";
@@ -10,9 +10,11 @@ import { LIMITS } from "./guard.js";
 const J = (status, obj) => ({ status, type: "application/json", body: JSON.stringify(obj) });
 const parse = t => { try { return JSON.parse(t || "{}") || {}; } catch { return {}; } };
 
-export function snapshot() {
+export async function snapshot() {
   const { demo, state } = rt;
   return {
+    me: rt.me, settings: state.settings, onboarded: !!state.onboarded,
+    google: rt.google ? { available: true, calendar: rt.google.has("calendar"), gmail: rt.google.has("gmail"), email: rt.google.email || "" } : { available: false },
     user: demo.user, apps: demo.apps,
     contacts: demo.contacts.map(c => ({ name: c.name, aliases: c.aliases })),
     blocked: demo.blocked_apps, limits: LIMITS, spentToday: rt.spentToday(),
@@ -21,7 +23,7 @@ export function snapshot() {
     lastOrder: state.lastOrder,
     diary: rt.diaryToday().slice(0, 40),
     pending: rt.approvals.list(),
-    brain: brainInfo(),
+    brain: await brainInfo(),
     tools: TOOLS.map(t => ({ name: t.name, kind: t.kind, app: t.app })),
     diaryDir: rt.diaryLabel, host: rt.host,
   };
@@ -44,7 +46,28 @@ export async function api(method, path, bodyText, headers = {}) {
   if (method === "GET" && path === "/api/diary.md") return { status: 200, type: "text/markdown; charset=utf-8", body: rt.readDiary(1).map(d => d.text).join("\n") || "# Diary is empty\n" };
   const b = method === "POST" ? parse(bodyText) : {};
   switch (`${method} ${path}`) {
-    case "GET /api/state": return J(200, snapshot());
+    case "GET /api/state": return J(200, await snapshot());
+    // Settings: which apps are connected, money rules, onboarding done. Money rules are clamped by the guard too.
+    case "POST /api/settings": {
+      const st = rt.state.settings;
+      if (b.apps && typeof b.apps === "object") {
+        const ok = new Set(rt.demo.apps.filter(a => a.tier !== "blocked").map(a => a.id));
+        for (const [k, v] of Object.entries(b.apps)) if (ok.has(k)) st.apps[k] = !!v;
+      }
+      if (b.autoPayUnder !== undefined) st.autoPayUnder = Math.max(0, Math.min(LIMITS.autoPayUnder, Math.round(+b.autoPayUnder || 0)));
+      if (b.dailyCap !== undefined) st.dailyCap = Math.max(500, Math.min(50000, Math.round(+b.dailyCap || 0)));
+      if (b.onboarded !== undefined) rt.state.onboarded = !!b.onboarded;
+      rt.save();
+      return J(200, { ok: true, settings: st, onboarded: rt.state.onboarded });
+    }
+    // Start over with fresh demo data (keeps your apps and money rules).
+    case "POST /api/reset": {
+      const keep = { settings: rt.state.settings, onboarded: rt.state.onboarded, brainUsed: rt.state.brainUsed };
+      for (const k of Object.keys(rt.state)) delete rt.state[k];
+      Object.assign(rt.state, freshState(), keep);
+      rt.save();
+      return J(200, { ok: true });
+    }
     case "POST /api/step": {
       const c = stepToCall(b.step || {});
       if (!c) return J(200, { ok: false, say: "I didn't get that." });

@@ -1,5 +1,6 @@
 // J.A.S.S.I dashboard: live speech -> reflex parser (mid-sentence) -> server tools (through the safety guard).
 import { Parser, STABLE_MS } from "./reflex.js";
+import { initSetup, showSignin, openOnboarding, openSettings, closeSettings } from "./setup.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -202,6 +203,7 @@ async function askBrain(text) {
 }
 
 function afterResult(r) {
+  if (r.needApp) toast("Not connected", r.say, "", { label: "Open Settings", fn: () => openSettings("apps") });
   if (r.say) { reply(r.say, !r.ok); speak(r.say); }
   if (!talkBack || !r.say) setMode("idle");
   if (r.ok && r.open) openLink(r.open, r);
@@ -444,7 +446,8 @@ document.addEventListener("keydown", e => {
     if (e.key === "Enter" && pendingOk?.level === "confirm") answerOk(true);
     return;
   }
-  if (e.key === "Escape") { $("#brief").hidden = true; speechSynthesis?.cancel(); stopListening(); }
+  if (e.key === "Escape") { $("#brief").hidden = true; closeSettings(); speechSynthesis?.cancel(); stopListening(); }
+  if (!$("#settings").hidden || !$("#onboard").hidden || !$("#signin").hidden) return;
   if (e.code === "Space" && !/INPUT|TEXTAREA|BUTTON/.test(document.activeElement.tagName)) { e.preventDefault(); startListening(); }
 });
 $("#btn-voice").onclick = () => {
@@ -462,16 +465,26 @@ $("#btn-attack").onclick = async () => {
 
 // ================================================================ panels from server state
 function renderApps() {
-  $("#apps").innerHTML = S.apps.map(a => `<li data-id="${a.id}" class="${a.tier}"><span class="ic">${a.tier === "blocked" ? "✕" : esc(a.name[0])}</span>
+  const on = S.settings?.apps || {};
+  $("#apps").innerHTML = S.apps.map(a => {
+    const g = S.google?.available && (a.id === "calendar" || a.id === "gmail");
+    const isOn = g ? S.google[a.id] : on[a.id];
+    const st = a.tier === "blocked" ? ["blocked", "LOCKED"] : isOn ? ["connect", g ? "GOOGLE" : a.tier === "link" ? "LINK" : "ON"] : ["off", "CONNECT"];
+    return `<li data-id="${a.id}" class="${a.tier} ${isOn ? "" : a.tier === "blocked" ? "" : "dim"}"><span class="ic">${a.tier === "blocked" ? "✕" : esc(a.name[0])}</span>
     <span><span class="nm">${esc(a.name)}</span><span class="how">${esc(a.how)}</span></span>
-    <span class="st ${a.tier}">${{ connect: "ON", link: "LINK", blocked: "LOCKED" }[a.tier]}</span></li>`).join("");
+    <span class="st ${st[0]}">${st[1]}</span></li>`;
+  }).join("");
 }
+$("#apps").onclick = () => openSettings("apps");
 function renderMoney() {
-  const p = Math.min(1, S.spentToday / S.limits.dailyCap);
+  const p = Math.min(1, S.spentToday / S.settings.dailyCap);
   $("#gauge-fg").style.strokeDashoffset = 314.16 * (1 - p);
   $("#gauge-fg").style.stroke = p > .8 ? "var(--red)" : p > .5 ? "var(--amber)" : "";
   $("#spent").textContent = inr(S.spentToday);
-  $("#cap").textContent = inr(S.limits.dailyCap);
+  $("#cap").textContent = inr(S.settings.dailyCap);
+  const auto = S.settings.autoPayUnder;
+  $(".rules").innerHTML = `<div><i class="dot g"></i>${auto > 0 ? `Under ${inr(auto)} · <b>pays on its own</b>` : `<b>Every payment asks you</b>`}</div>
+    <div><i class="dot a"></i>${inr(auto)} or more · <b>your fingerprint</b></div><div><i class="dot r"></i>Bank &amp; UPI apps · <b>locked</b></div>`;
 }
 let timers = [];
 function renderUpcoming() {
@@ -494,10 +507,12 @@ function updateStats() {
   $("#st-blocked").textContent = stats.blocked;
 }
 async function refresh() {
-  S = await fetch("/api/state").then(r => r.json());
+  const res = await fetch("/api/state");
+  if (res.status === 401) { showSignin(await res.json()); throw new Error("signed out"); }
+  S = await res.json();
   parser = new Parser(S.contacts, S.blocked);
   timers = S.timers;
-  renderMoney(); renderUpcoming(); renderDiary(); updateStats();
+  renderMoney(); renderUpcoming(); renderDiary(); updateStats(); renderApps(); renderMe();
   const b = $("#pill-brain");
   b.classList.toggle("on", S.brain.on); b.classList.toggle("warn", !S.brain.on);
   b.lastChild.textContent = S.brain.on ? "Brain: Claude Code" : "Brain: offline";
@@ -589,11 +604,15 @@ function ticker(s) {
   $("#ticker").innerHTML = items.map(i => `<b>◆</b>${esc(i)}`).join("");
 }
 async function boot() {
-  const lines = ["Starting J.A.S.S.I", "Safety guard", "Connecting your apps", "Diary on this device", "MCP server", "Brain"];
+  const lines = ["Starting J.A.S.S.I", "Safety guard", "Your apps", "Diary", "MCP server", "Brain"];
   const log = $("#bootlog");
-  const s = await refresh().catch(() => null);
-  if (!s) { log.textContent = "Can't reach the J.A.S.S.I server. Run: npm start"; return; }
-  const res = ["", "ON", `${s.apps.filter(a => a.tier !== "blocked").length} connected · ${s.apps.filter(a => a.tier === "blocked").length} locked`, "OK", "/mcp ready", s.brain.on ? "Claude Code" : "offline"];
+  let s;
+  try { s = await refresh(); } catch (e) {
+    if (e.message === "signed out") return;
+    log.textContent = "Can't reach J.A.S.S.I right now. Check your internet and reload."; return;
+  }
+  const nOn = Object.values(s.settings.apps || {}).filter(Boolean).length + (s.google?.calendar ? 0 : 0);
+  const res = [s.me?.name ? "Hi " + s.me.name.split(" ")[0] : "", "ON", nOn ? `${nOn} connected · ${s.apps.filter(a => a.tier === "blocked").length} locked` : "none yet", "OK", "/mcp ready", s.brain.on ? "Claude Code" : "offline"];
   requestAnimationFrame(() => $(".boot-bar i").style.width = "100%");
   const skip = LS.get("jassi.booted") === new Date().toDateString();
   for (let i = 0; i < lines.length; i++) {
@@ -605,8 +624,30 @@ async function boot() {
   LS.set("jassi.booted", new Date().toDateString());
   renderApps(); suggestions(); ticker(s);
   for (const a of s.pending) showOk(a);
-  if (LS.get("jassi.briefDay") !== new Date().toDateString() && !new URLSearchParams(location.search).has("nobrief")) setTimeout(() => runText("brief me", false), 500);
+  const q = new URLSearchParams(location.search);
+  const back = LS.get("jassi.return"); LS.set("jassi.return", "");
+  if (q.get("connected")) toast("Connected", `${q.get("connected") === "gmail" ? "Gmail" : "Google Calendar"} is connected. I'll use your real one now.`);
+  if (q.get("error")) toast("Something went wrong", q.get("error"));
+  if (q.toString()) history.replaceState(null, "", location.pathname);
+  if (!s.onboarded) return openOnboarding(back === "onboard" ? 2 : 0);
+  if (back === "settings") return openSettings("apps");
+  ready();
 }
+function ready() {
+  if (LS.get("jassi.briefDay") !== new Date().toDateString() && !new URLSearchParams(location.search).has("nobrief") && S.settings.apps.books) setTimeout(() => runText("brief me", false), 500);
+}
+function renderMe() {
+  const me = S.me || {};
+  $("#btn-me").innerHTML = me.picture ? `<img src="${esc(me.picture)}" alt="" referrerpolicy="no-referrer">` : esc((me.name || "?")[0]);
+  $("#btn-me").title = (me.name || "") + (me.email ? " · " + me.email : "");
+}
+$("#btn-settings").onclick = () => openSettings();
+$("#btn-me").onclick = () => openSettings("account");
+initSetup({
+  getS: () => S, refresh, toast, runText: t => runText(t), ready,
+  prefs: { talkBack: () => talkBack, setTalkBack: v => { talkBack = v; LS.set("jassi.voice", v ? "on" : "off"); $("#btn-voice").setAttribute("aria-pressed", v); } },
+});
+if (LS.get("jassi.sim") === "off") $("#sim").checked = false;
 $("#boot").onclick = () => $("#boot").classList.add("gone");
 
 buildReactor(); field(); clock(); setInterval(clock, 1000); connect(); setMode("idle"); boot();

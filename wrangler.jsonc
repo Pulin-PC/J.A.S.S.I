@@ -1,11 +1,21 @@
 {
   // J.A.S.S.I on Cloudflare Workers. Deploy: npx wrangler deploy
+  // Secrets (wrangler secret put): BRAIN_TOKEN, SESSION_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OWNER_EMAIL
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "jassi",
   "main": "worker/index.js",
   "compatibility_date": "2025-09-01",
+  "compatibility_flags": ["nodejs_compat"],
   "assets": { "directory": "./public", "binding": "ASSETS" },
-  "durable_objects": { "bindings": [{ "name": "HUB", "class_name": "JassiHub" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["JassiHub"] }],
+  "durable_objects": {
+    "bindings": [
+      { "name": "HUB", "class_name": "JassiHub" },
+      { "name": "DIR", "class_name": "JassiDirectory" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["JassiHub"] },
+    { "tag": "v2", "new_sqlite_classes": ["JassiDirectory"] }
+  ],
   "observability": { "enabled": true }
 }

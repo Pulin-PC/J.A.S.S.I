@@ -38,6 +38,16 @@ wHACKiest 2026 · Track 1: *Make MCP Matter* · Team J.A.S.S.I (MSRIT) — Round
 
 ---
 
+## Sign-in, setup and settings
+
+- **Google sign-in, invite only.** The owner (set by `OWNER_EMAIL`) makes invite links in **⚙ Settings → Invites**. Nobody gets in without one.
+- **Everyone gets their own private J.A.S.S.I**: their own apps, wallet, money rules, approvals and diary (one Durable Object per person).
+- **First-time setup:** welcome → microphone and alerts → **connect your apps** (tick them; bank, UPI and ID apps stay locked) → **money rules** (sliders: auto-pay limit up to ₹5,000, daily limit) → try a first command.
+- **Real Google Calendar and Gmail** once you press *Connect*: events go into your real calendar, and "read my emails" reads your real inbox (read-only; the scam check still applies).
+- **⚙ Settings:** Account · Apps · Money rules · Brain (questions left today) · Voice · Invites (owner) · AI apps (your personal MCP link and key) · Diary & data.
+- **Brain limits:** the owner has no limit; invited people get 30 questions a day. Each person gets their own Claude Code process, so conversations never mix.
+- **Works on phones:** it's a web app. Use *Add to Home Screen* and it opens like an app.
+
 ## Run it (no install, no dependencies)
 
 Needs **Node 20+** and **Chrome** (for voice).
@@ -67,6 +77,10 @@ The same tools, guard and MCP code run on **Cloudflare Workers**. One **Durable 
 npx wrangler@4 login
 npx wrangler@4 deploy
 openssl rand -hex 24 | npx wrangler@4 secret put BRAIN_TOKEN   # private link for the brain
+openssl rand -hex 32 | npx wrangler@4 secret put SESSION_SECRET  # signs sign-in cookies
+npx wrangler@4 secret put GOOGLE_CLIENT_ID
+npx wrangler@4 secret put GOOGLE_CLIENT_SECRET
+npx wrangler@4 secret put OWNER_EMAIL                              # your Google email = owner
 ```
 
 Then put `JASSI_CLOUD_URL=https://<your-worker>.workers.dev` and `JASSI_CLOUD_BRAIN_TOKEN=<same token>` in `.env`, and connect the brain from your Mac:
