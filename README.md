@@ -40,8 +40,8 @@ wHACKiest 2026 · Track 1: *Make MCP Matter* · Team J.A.S.S.I (MSRIT) — Round
 Needs **Node 20+** and **Chrome** (for voice).
 
 ```bash
-git clone https://github.com/Pulin-PC/jassi.git
-cd jassi
+git clone https://github.com/Pulin-PC/J.A.S.S.I.git
+cd J.A.S.S.I
 npm start
 ```
 
