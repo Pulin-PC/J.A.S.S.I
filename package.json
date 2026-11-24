@@ -1,0 +1,15 @@
+{
+  "name": "jassi",
+  "version": "0.1.0",
+  "description": "J.A.S.S.I - one assistant for all your apps, with a safety guard in code. wHACKiest 2026 Round 1 prototype.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

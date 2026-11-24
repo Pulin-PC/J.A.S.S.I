@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>J.A.S.S.I</title>
+<meta name="description" content="Just Another Smart System Interface - one assistant for all your apps, with a safety guard in code.">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+</head>
+<body class="idle">
+<canvas id="field" aria-hidden="true"></canvas>
+<div class="scan" aria-hidden="true"></div>
+
+<!-- boot -->
+<div id="boot">
+  <div class="boot-box">
+    <div class="boot-logo">J.A.S.S.I</div>
+    <div class="boot-sub">Just Another Smart System Interface</div>
+    <pre id="bootlog"></pre>
+    <div class="boot-bar"><i></i></div>
+  </div>
+</div>
+
+<header class="top">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><polygon points="20,3 35,11.5 35,28.5 20,37 5,28.5 5,11.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="20" cy="20" r="6" fill="currentColor"/></svg>
+    <div>
+      <div class="brand-name">J.A.S.S.I</div>
+      <div class="brand-sub">Just Another Smart System Interface</div>
+    </div>
+  </div>
+  <div class="pills">
+    <span class="pill on" id="pill-guard"><b></b>Safety guard on</span>
+    <span class="pill" id="pill-brain"><b></b>Brain</span>
+    <span class="pill on" id="pill-mcp"><b></b>MCP ready</span>
+    <span class="pill" id="pill-live"><b></b>Live</span>
+  </div>
+  <div class="top-right">
+    <button class="ghost" id="btn-brief" title="Today's business brief">Brief</button>
+    <button class="ghost icon" id="btn-voice" title="Talk back: on" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z" fill="currentColor"/></svg></button>
+    <div class="clock"><div id="clock-time">--:--</div><div id="clock-date">---</div></div>
+  </div>
+</header>
+
+<main class="grid">
+  <!-- LEFT -->
+  <section class="col left">
+    <div class="panel" id="panel-apps">
+      <h2><span>01</span>Your apps</h2>
+      <ul id="apps" class="apps"></ul>
+    </div>
+    <div class="panel" id="panel-money">
+      <h2><span>02</span>Money</h2>
+      <div class="money">
+        <svg viewBox="0 0 120 120" class="gauge">
+          <circle cx="60" cy="60" r="50" class="g-bg"/>
+          <circle cx="60" cy="60" r="50" class="g-fg" id="gauge-fg"/>
+          <circle cx="60" cy="60" r="56" class="g-ticks"/>
+        </svg>
+        <div class="money-txt">
+          <div class="big" id="spent">₹0</div>
+          <div class="dim">spent today of <span id="cap">₹10,000</span></div>
+        </div>
+      </div>
+      <div class="rules">
+        <div><i class="dot g"></i>Under ₹5,000 · <b>pays on its own</b></div>
+        <div><i class="dot a"></i>₹5,000 or more · <b>your fingerprint</b></div>
+        <div><i class="dot r"></i>Bank &amp; UPI apps · <b>locked</b></div>
+      </div>
+      <button class="ghost wide" id="btn-attack" title="Pretend the AI read a scam email and tries to pay">Test the guard: scam email tries to pay</button>
+    </div>
+    <div class="panel" id="panel-next">
+      <h2><span>03</span>Coming up</h2>
+      <ul id="upcoming" class="upcoming"><li class="empty">Nothing yet</li></ul>
+    </div>
+  </section>
+
+  <!-- CENTER -->
+  <section class="col center">
+    <div class="reactor-wrap">
+      <svg id="reactor" viewBox="0 0 400 400" role="button" tabindex="0" aria-label="Talk to J.A.S.S.I">
+        <defs>
+          <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#ffffff" stop-opacity="1"/>
+            <stop offset="25%" stop-color="var(--c1)" stop-opacity=".95"/>
+            <stop offset="60%" stop-color="var(--c2)" stop-opacity=".35"/>
+            <stop offset="100%" stop-color="var(--c2)" stop-opacity="0"/>
+          </radialGradient>
+          <filter id="blur6"><feGaussianBlur stdDeviation="6"/></filter>
+        </defs>
+        <circle cx="200" cy="200" r="196" class="r-halo"/>
+        <g class="spin s60"><circle cx="200" cy="200" r="188" class="r-ticks"/></g>
+        <g class="spin s24 rev"><circle cx="200" cy="200" r="172" class="r-arcs"/></g>
+        <g class="spin s40"><circle cx="200" cy="200" r="158" class="r-thin"/><g id="segs"></g></g>
+        <g class="spin s16 rev"><circle cx="200" cy="200" r="128" class="r-thick"/></g>
+        <g class="spin s9"><circle cx="200" cy="200" r="112" class="r-dash"/></g>
+        <g id="bars"></g>
+        <circle cx="200" cy="200" r="92" class="r-inner"/>
+        <g class="core">
+          <circle cx="200" cy="200" r="78" fill="url(#coreGlow)" filter="url(#blur6)" class="core-glow"/>
+          <polygon class="hex" points="200,150 243,175 243,225 200,250 157,225 157,175"/>
+          <polygon class="hex2" points="200,166 229,183 229,217 200,234 171,217 171,183"/>
+          <circle cx="200" cy="200" r="22" class="core-dot"/>
+        </g>
+      </svg>
+      <div class="state" id="state">Ready</div>
+    </div>
+
+    <div class="talk">
+      <div class="heard" id="heard"><span class="hint">Tap the core or press <kbd>Space</kbd> and talk. Or type below.</span></div>
+      <div class="reply" id="reply"></div>
+      <div class="chips" id="suggest"></div>
+      <form class="cmd" id="cmd" autocomplete="off">
+        <button type="button" class="mic" id="mic" title="Talk (Space)"><svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11h-2z" fill="currentColor"/></svg></button>
+        <input id="cmd-in" placeholder="Tell me what to do…" aria-label="Command">
+        <label class="sim" title="Types your words one by one, like speech, so you can watch steps run mid-sentence"><input type="checkbox" id="sim" checked><span>Like voice</span></label>
+        <button class="go" type="submit">Go</button>
+      </form>
+    </div>
+    <div class="stats">
+      <div><b id="st-early">0</b><span>done before you finished</span></div>
+      <div><b id="st-speed">–</b><span>average action time</span></div>
+      <div><b id="st-actions">0</b><span>actions today</span></div>
+      <div><b id="st-blocked">0</b><span>stopped by the guard</span></div>
+    </div>
+  </section>
+
+  <!-- RIGHT -->
+  <section class="col right">
+    <div class="panel grow" id="panel-feed">
+      <h2><span>04</span>What I'm doing</h2>
+      <ol id="feed" class="feed"></ol>
+    </div>
+    <div class="panel" id="panel-code">
+      <h2><span>05</span>Code Mode <em id="code-meta"></em></h2>
+      <pre id="code" class="code"><span class="c-dim">// When you ask for several things at once, I write one
+// small script and run every step in it, in a sandbox.
+// Each step still goes through the safety guard.</span></pre>
+    </div>
+    <div class="panel" id="panel-diary">
+      <h2><span>06</span>Diary <em id="diary-path"></em></h2>
+      <ol id="diary" class="diary"></ol>
+    </div>
+  </section>
+</main>
+
+<footer class="ticker"><div class="ticker-in" id="ticker"></div></footer>
+
+<!-- approval -->
+<div id="ok" class="overlay" hidden>
+  <div class="ok-card">
+    <div class="ok-head"><span class="ok-tag" id="ok-tag">Needs your OK</span><span class="ok-timer" id="ok-timer">60</span></div>
+    <h3 id="ok-title"></h3>
+    <p id="ok-detail"></p>
+    <p class="ok-why" id="ok-why"></p>
+    <div class="ok-actions" id="ok-confirm">
+      <button class="btn no" id="ok-no">No</button>
+      <button class="btn yes" id="ok-yes">Yes, do it</button>
+    </div>
+    <div class="ok-finger" id="ok-finger" hidden>
+      <button class="finger" id="finger" aria-label="Hold to approve with fingerprint">
+        <svg viewBox="0 0 120 120">
+          <circle cx="60" cy="60" r="54" class="f-bg"/>
+          <circle cx="60" cy="60" r="54" class="f-fill" id="f-fill"/>
+          <g class="f-print" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+            <path d="M42 50a19 19 0 0 1 36 0"/><path d="M38 60c0-14 10-24 22-24s22 10 22 24v6"/>
+            <path d="M46 84c3-6 4-12 4-20a10 10 0 0 1 20 0c0 10-2 18-6 24"/><path d="M56 88c3-7 4-15 4-24"/>
+            <path d="M74 84c2-6 3-12 3-18"/><path d="M38 72c1 5 2 8 4 11"/>
+          </g>
+        </svg>
+      </button>
+      <div class="finger-txt">Hold to approve with your fingerprint</div>
+      <button class="btn no small" id="ok-no2">No, stop it</button>
+    </div>
+  </div>
+</div>
+
+<!-- brief -->
+<div id="brief" class="overlay" hidden>
+  <div class="brief-card">
+    <button class="x" id="brief-x" aria-label="Close">✕</button>
+    <div class="brief-head"><div class="brief-kick">Good <span id="brief-part">morning</span>, <span id="brief-name"></span></div><h3>Here's your business today</h3></div>
+    <div class="brief-grid" id="brief-grid"></div>
+    <div class="brief-steps"><div class="lbl">Top 3 next steps · one tap each</div><div id="brief-steps"></div></div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
