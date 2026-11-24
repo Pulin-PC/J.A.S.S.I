@@ -1,6 +1,7 @@
 // J.A.S.S.I as an MCP server (Streamable HTTP, JSON responses). Any MCP client - Claude Code, Claude Desktop,
 // another agent - can use J.A.S.S.I's tools, and they get the SAME safety guard, approvals and diary.
-//   claude mcp add --transport http jassi http://localhost:7777/mcp
+//   Live site:  copy your command from Settings -> AI apps (it carries your personal key)
+//   Your own computer (npm start):  claude mcp add --transport http jassi http://localhost:7777/mcp
 // J.A.S.S.I's own brain (Claude Code via brain/bridge.js) connects with the brain token, so its calls are marked "brain".
 import { TOOLS, call } from "./tools.js";
 import { rt } from "./runtime.js";

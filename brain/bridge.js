@@ -69,14 +69,17 @@ function mcpConfig(uid) {
   return cfg;
 }
 
-function claudeArgs(cfg) {
+// WebFetch runs on this Mac, so it could reach this Mac's localhost and home network. Only the owner gets it;
+// invited people get WebSearch (runs at Anthropic) and the jassi tools.
+function claudeArgs(cfg, owner) {
+  const web = owner ? ["WebSearch", "WebFetch"] : ["WebSearch"];
   return ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
     "--no-session-persistence", "--setting-sources", "", "--system-prompt", SYSTEM,
-    "--tools", "WebSearch,WebFetch", "--mcp-config", cfg, "--strict-mcp-config",
-    "--allowedTools", "mcp__jassi WebSearch WebFetch", "--model", MODEL, ...(EFFORT ? ["--effort", EFFORT] : [])];
+    "--tools", web.join(","), "--mcp-config", cfg, "--strict-mcp-config",
+    "--allowedTools", ["mcp__jassi", ...web].join(" "), "--model", MODEL, ...(EFFORT ? ["--effort", EFFORT] : [])];
 }
 
-function worker(uid) {
+function worker(uid, owner) {
   let w = procs.get(uid);
   if (w) { w.lastUsed = Date.now(); return w; }
   if (procs.size >= MAX_PROCS) {   // make room: stop the least recently used idle one
@@ -88,7 +91,7 @@ function worker(uid) {
   w.start = () => {
     const { env } = accountEnv();
     let errText = "";
-    w.proc = spawn(CLAUDE, claudeArgs(mcpConfig(uid)), { env, cwd: HOME, stdio: ["pipe", "pipe", "pipe"] });
+    w.proc = spawn(CLAUDE, claudeArgs(mcpConfig(uid), owner), { env, cwd: HOME, stdio: ["pipe", "pipe", "pipe"] });
     w.proc.stdout.setEncoding("utf8");
     w.proc.stdout.on("data", d => { w.buf += d; let i; while ((i = w.buf.indexOf("\n")) >= 0) { const line = w.buf.slice(0, i); w.buf = w.buf.slice(i + 1); onLine(w, line); } });
     w.proc.stderr.on("data", d => { errText += d; });
@@ -122,7 +125,7 @@ function onLine(w, line) {
 }
 
 function send(q) {
-  const w = worker(q.uid || "local");
+  const w = worker(q.uid || "local", !q.uid || q.role === "owner");
   w.queue.push(q);
   next(w);
 }

@@ -1,6 +1,7 @@
 // Node only: free-form Code Mode scripts (written by an AI client through MCP `run_script`).
 // The script sees only `tools.*`, `done()`, `stop()` and `console.log` - no files, no network, no keys.
-// Prototype sandbox: node:vm with an empty global. Production plan: an isolated worker / V8 isolate.
+// Prototype sandbox: node:vm with an empty global. node:vm is NOT a security boundary, so this runs only on your own
+// computer, behind the local-only API check in server/index.js. Production plan: an isolated worker / V8 isolate.
 import vm from "node:vm";
 import { call, TOOLS } from "./tools.js";
 import { rt } from "./runtime.js";

@@ -48,9 +48,11 @@ wHACKiest 2026 · Track 1: *Make MCP Matter* · Team J.A.S.S.I (MSRIT) — Round
 - **Brain limits:** the owner has no limit; invited people get 30 questions a day. Each person gets their own Claude Code process, so conversations never mix.
 - **Works on phones:** it's a web app. Use *Add to Home Screen* and it opens like an app.
 
-## Run it (no install, no dependencies)
+## Run it
 
-Needs **Node 20+** and **Chrome** (for voice).
+**Easiest:** open the live site, https://jassi.pulin-chaudhari.workers.dev, and sign in with Google (invite only).
+
+**On your own computer** (no install, no dependencies). Needs **Node 20+** and **Chrome** (for voice).
 
 ```bash
 git clone https://github.com/Pulin-PC/J.A.S.S.I.git

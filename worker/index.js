@@ -62,7 +62,7 @@ export class JassiHub extends DurableObject {
       diaryLabel: "kept in your private Cloudflare space · download: /api/diary.md",
       brainToken: env.BRAIN_TOKEN || "",
       brainOnline: async () => (await (await dir().fetch("https://dir/brain/status")).json()).on,
-      brainAsk: async q => (await dir().fetch("https://dir/brain/ask", { method: "POST", body: JSON.stringify({ ...q, uid: this.me?.sub, name: (this.me?.name || "").split(" ")[0] }) })).json(),
+      brainAsk: async q => (await dir().fetch("https://dir/brain/ask", { method: "POST", body: JSON.stringify({ ...q, uid: this.me?.sub, role: this.me?.role, name: (this.me?.name || "").split(" ")[0] }) })).json(),
       runScript: null,      // Workers can't run new code at runtime; Code Mode from your sentence still works
       google: env.GOOGLE_CLIENT_ID ? this.googleApi() : null,
       me: { name: "You", role: "member" },
@@ -225,7 +225,7 @@ export class JassiDirectory extends DurableObject {
         const say = await new Promise(resolve => {
           const t = setTimeout(() => { this.waiting.delete(body.id); resolve("That took too long, so I stopped."); }, 180000);
           this.waiting.set(body.id, s => { clearTimeout(t); resolve(s); });
-          this.brainBus.emit("ask", { id: body.id, uid: body.uid, name: body.name, text: body.text, now: body.now });
+          this.brainBus.emit("ask", { id: body.id, uid: body.uid, role: body.role, name: body.name, text: body.text, now: body.now });
         });
         return json({ say });
       }
@@ -251,8 +251,25 @@ async function forward(req, stub, extra = {}) {
   return stub.fetch(new Request(req.url, { method: req.method, headers: h, body: req.method === "GET" || req.method === "HEAD" ? undefined : await req.arrayBuffer() }));
 }
 
+const SECURITY_HEADERS = {
+  "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+  "x-frame-options": "DENY",
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "strict-transport-security": "max-age=31536000",
+};
+function hardened(res) {
+  const r = new Response(res.body, res);
+  for (const [k, v] of Object.entries(SECURITY_HEADERS)) r.headers.set(k, v);
+  return r;
+}
+
 export default {
-  async fetch(req, env) {
+  async fetch(req, env) { return hardened(await route(req, env)); },
+};
+
+async function route(req, env) {
+  {
     const url = new URL(req.url);
     const p = url.pathname;
     const secure = url.protocol === "https:";
@@ -321,7 +338,7 @@ export default {
     // ---------------------------------------------------------- MCP: the brain (per person) or your own AI app (personal key)
     if (p === "/mcp") {
       if (brainOk && req.headers.get("x-jassi-user")) return forward(req, hubFor(env, req.headers.get("x-jassi-user")));
-      const key = bearerOf(req) || url.searchParams.get("key") || "";
+      const key = bearerOf(req);
       const sub = key.startsWith("jk_") ? (await (await dirOf(env).fetch("https://dir/mcpkey/lookup?key=" + encodeURIComponent(key))).json()).sub : null;
       if (!sub) return json({ jsonrpc: "2.0", id: null, error: { code: -32001, message: "Sign in to J.A.S.S.I and copy your MCP link from Settings." } }, 401);
       const h = new Headers(req.headers); h.delete("authorization");
@@ -348,5 +365,5 @@ export default {
       return forward(req, hubFor(env, session.sub), { "x-jassi-me": JSON.stringify({ sub: session.sub, email: session.email, name: session.name, picture: session.picture, role: session.role }) });
     }
     return env.ASSETS.fetch(req);
-  },
-};
+  }
+}

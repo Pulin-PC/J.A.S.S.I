@@ -30,6 +30,14 @@ rt.brainToken = process.env.BRAIN_TOKEN || crypto.randomBytes(24).toString("hex"
 const brainBus = makeBus();
 rt.brainLink = { count: () => brainBus.size, send: q => brainBus.emit("ask", q) };
 
+// Only this dashboard and local apps may use the API: a web page you visit must not drive J.A.S.S.I on your computer.
+const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
+function trusted(req, url) {
+  if (LOOPBACK.has(HOST === "::1" ? "[::1]" : HOST) && !LOOPBACK.has(url.hostname)) return false;   // DNS rebinding
+  const origin = req.headers.origin;
+  return !origin || origin === `${url.protocol}//${url.host}`;                                        // another website
+}
+
 const readBody = req => new Promise(r => { let b = ""; req.on("data", c => { b += c; if (b.length > 1e6) req.destroy(); }); req.on("end", () => r(b)); });
 
 function stream(req, res, bus, hello) {
@@ -43,6 +51,7 @@ function stream(req, res, bus, hello) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   try {
+    if ((url.pathname.startsWith("/api/") || url.pathname === "/mcp") && !trusted(req, url)) { res.writeHead(403, { "content-type": "application/json" }); return res.end('{"error":"forbidden"}'); }
     if (url.pathname === "/api/events") return stream(req, res, rt.bus, { at: Date.now() });
     if (url.pathname === "/api/brain/listen") {
       if (!tokenOk(bearer(req.headers))) { res.writeHead(401); return res.end(); }
