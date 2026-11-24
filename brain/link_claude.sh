@@ -11,6 +11,8 @@ echo "Step 2: paste the token shown above (sk-ant-oat…, it may wrap over 2 lin
 TOKEN=""
 while IFS= read -rs LINE && [[ -n "$LINE" ]]; do TOKEN+="$LINE"; done
 TOKEN="${TOKEN//[[:space:]]/}"
+# keep one copy if it was pasted more than once
+TOKEN=$(printf '%s' "$TOKEN" | python3 -c 'import sys; t = sys.stdin.read(); p = [x for x in t.split("sk-ant-") if x]; print("sk-ant-" + p[0] if p else t)')
 echo
 [[ "$TOKEN" == sk-ant-* && ${#TOKEN} -ge 90 ]] || { echo "That doesn't look like a full token (${#TOKEN} chars). Nothing saved."; exit 1; }
 security add-generic-password -U -s JASSI-claude-pulin -a pulin -w "$TOKEN"
