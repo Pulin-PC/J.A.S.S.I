@@ -412,7 +412,7 @@ async function startListening() {
   setMode("listening");
   $("#heard").innerHTML = `<span class="hint">Listening…</span>`;
   sfx.fire();
-  meter();
+  if (!/Android/i.test(navigator.userAgent)) meter(); // Android: a getUserMedia stream steals the mic from SpeechRecognition
 }
 function stopListening() {
   const r = rec; rec = null; clearTimeout(silence);
