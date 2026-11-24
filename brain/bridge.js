@@ -207,7 +207,30 @@ async function listen() {
   }
 }
 
+// ---------------------------------------------------------------- cloud: ask the site for work, again and again
+// One short request at a time (the site answers at once, or after 20 s with nothing). No long-lived line means nothing
+// can go stale: after a redeploy, a Mac sleep or a network change, the very next request simply works.
+async function pollCloud() {
+  let wait = 1000, up = false;
+  for (;;) {
+    try {
+      const res = await fetch(URL_ + "/api/brain/poll", { headers: { authorization: "Bearer " + TOKEN }, signal: AbortSignal.timeout(30000) });
+      if (res.status === 401) { log("The server refused the brain token. Check JASSI_CLOUD_BRAIN_TOKEN."); process.exit(1); }
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const { asks = [] } = await res.json();
+      if (!up) { up = true; log("connected to", URL_); }
+      wait = 1000;
+      for (const q of asks) send(q);
+    } catch (e) {
+      if (up) log(`lost the server (${e.message}); retrying`);
+      up = false;
+      await new Promise(r => setTimeout(r, wait));
+      wait = Math.min(wait * 2, 5000);
+    }
+  }
+}
+
 fs.mkdirSync(HOME, { recursive: true });
-probe().then(() => { log("ready ✓"); listen(); });
+probe().then(() => { log("ready ✓"); CLOUD ? pollCloud() : listen(); });
 const bye = () => { for (const w of procs.values()) w.stop(); process.exit(0); };
 process.on("SIGINT", bye); process.on("SIGTERM", bye);

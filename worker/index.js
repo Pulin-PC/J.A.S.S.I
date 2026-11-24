@@ -159,9 +159,15 @@ export class JassiHub extends DurableObject {
 export class JassiDirectory extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
-    this.brainBus = makeBus();
+    // The brain on the Mac asks for work with short requests (/brain/poll), so a redeploy can never strand it on an old
+    // copy of this object: its very next poll lands on the new one. "Online" = a poll is open or one finished recently.
+    this.queue = [];
+    this.wake = null;
+    this.polling = 0;
+    this.lastPoll = 0;
     this.waiting = new Map();
   }
+  get brainOn() { return this.polling > 0 || Date.now() - this.lastPoll < 45000; }
   async fetch(request) {
     const url = new URL(request.url);
     const S = this.ctx.storage;
@@ -217,15 +223,26 @@ export class JassiDirectory extends DurableObject {
       }
       case "/mcpkey/lookup": return json({ sub: (await S.get("mcpkey:" + url.searchParams.get("key"))) || null });
       // ---- the Claude Code brain (one bridge on the owner's Mac serves everyone, one Claude process per person)
-      case "/brain/listen": return sse(this.brainBus);
-      case "/brain/status": return json({ on: this.brainBus.size > 0 });
+      case "/brain/status": return json({ on: this.brainOn });
+      case "/brain/poll": {   // the brain's long-ish poll: returns at once if a question is waiting, else after 20 s with nothing
+        this.polling++; this.lastPoll = Date.now();
+        try {
+          if (!this.queue.length) await new Promise(resolve => {
+            const t = setTimeout(finish, 20000);
+            this.wake = finish;
+            function finish() { clearTimeout(t); resolve(); }
+          });
+        } finally { this.polling--; this.lastPoll = Date.now(); }
+        return json({ asks: this.queue.splice(0) });
+      }
       case "/brain/ask": {
-        for (let i = 0; i < 80 && !this.brainBus.size; i++) await new Promise(r => setTimeout(r, 250));   // up to 20 s: the brain reconnects by itself within ~18 s of any drop
-        if (!this.brainBus.size) return json({ say: "My thinking brain is offline right now. Direct commands still work." });
+        for (let i = 0; i < 120 && !this.brainOn; i++) await new Promise(r => setTimeout(r, 250));   // up to 30 s: the brain's next poll lands within seconds of any redeploy
+        if (!this.brainOn) return json({ say: "My thinking brain is offline right now. Direct commands still work." });
         const say = await new Promise(resolve => {
-          const t = setTimeout(() => { this.waiting.delete(body.id); resolve("That took too long, so I stopped."); }, 180000);
+          const t = setTimeout(() => { this.waiting.delete(body.id); this.queue = this.queue.filter(q => q.id !== body.id); resolve("That took too long, so I stopped."); }, 180000);
           this.waiting.set(body.id, s => { clearTimeout(t); resolve(s); });
-          this.brainBus.emit("ask", { id: body.id, uid: body.uid, role: body.role, name: body.name, text: body.text, now: body.now });
+          this.queue.push({ id: body.id, uid: body.uid, role: body.role, name: body.name, text: body.text, now: body.now });
+          this.wake?.();
         });
         return json({ say });
       }
@@ -330,9 +347,9 @@ async function route(req, env) {
       if (!brainOk) return json({ ok: false }, 401);
       return dirOf(env).fetch("https://dir/brain/status");
     }
-    if (p === "/api/brain/listen" || p === "/api/brain/answer") {
+    if (p === "/api/brain/poll" || p === "/api/brain/answer") {
       if (!brainOk) return json({ ok: false }, 401);
-      return dirOf(env).fetch(new Request("https://dir/brain/" + (p.endsWith("listen") ? "listen" : "answer"), { method: req.method, body: req.method === "POST" ? await req.text() : undefined }));
+      return dirOf(env).fetch(new Request("https://dir/brain/" + (p.endsWith("poll") ? "poll" : "answer"), { method: req.method, body: req.method === "POST" ? await req.text() : undefined }));
     }
 
     // ---------------------------------------------------------- MCP: the brain (per person) or your own AI app (personal key)
