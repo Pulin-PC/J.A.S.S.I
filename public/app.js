@@ -483,7 +483,7 @@ function renderUpcoming() {
 }
 const countdown = t => { const s = Math.max(0, Math.round((t - Date.now()) / 1000)); return s >= 3600 ? hhmm(t) : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 function renderDiary() {
-  $("#diary-path").textContent = "on this device · " + S.diaryDir;
+  $("#diary-path").textContent = S.diaryDir;
   $("#diary").innerHTML = S.diary.length ? S.diary.map(d => `<li><span class="t">${esc(d.time)}</span><span>${esc(d.title)}<div class="d">${esc(d.decision)} · ${esc(d.origin)}</div></span></li>`).join("") : `<li class="empty">Every action I take is written here.</li>`;
 }
 function updateStats() {
@@ -500,7 +500,7 @@ async function refresh() {
   renderMoney(); renderUpcoming(); renderDiary(); updateStats();
   const b = $("#pill-brain");
   b.classList.toggle("on", S.brain.on); b.classList.toggle("warn", !S.brain.on);
-  b.lastChild.textContent = S.brain.on ? "Brain: Claude" : "Brain: quick mode";
+  b.lastChild.textContent = S.brain.on ? "Brain: Claude Code" : "Brain: offline";
   return S;
 }
 
@@ -527,7 +527,8 @@ function connect() {
   es.addEventListener("diary", e => { const d = JSON.parse(e.data); S.diary.unshift(d); renderDiary(); });
   es.addEventListener("timer", e => { timers.push(JSON.parse(e.data)); renderUpcoming(); });
   es.addEventListener("calendar", () => refresh());
-  es.addEventListener("thinking", e => { setMode("thinking"); });
+  es.addEventListener("thinking", () => setMode("thinking"));
+  es.addEventListener("brain", () => refresh());
   es.onerror = () => $("#pill-live").classList.remove("on");
 }
 
@@ -584,7 +585,7 @@ function suggestions() {
 function ticker(s) {
   const items = ["Safety guard on", "Payments under ₹5,000 go through on their own", "₹5,000 or more needs your fingerprint", "Bank, UPI and ID apps are locked",
     "Instructions inside emails and web pages are ignored", "Every action is written to your diary", "Payments are in test mode", `MCP: ${location.origin}/mcp`,
-    s.brain.on ? `Brain: ${s.brain.model}` : "Brain: quick mode (add a key for questions)"];
+    s.brain.on ? "Brain: Claude Code on your Mac" : "Brain: offline (run npm run brain)"];
   $("#ticker").innerHTML = items.map(i => `<b>◆</b>${esc(i)}`).join("");
 }
 async function boot() {
@@ -592,7 +593,7 @@ async function boot() {
   const log = $("#bootlog");
   const s = await refresh().catch(() => null);
   if (!s) { log.textContent = "Can't reach the J.A.S.S.I server. Run: npm start"; return; }
-  const res = ["", "ON", `${s.apps.filter(a => a.tier !== "blocked").length} connected · ${s.apps.filter(a => a.tier === "blocked").length} locked`, "OK", "/mcp ready", s.brain.on ? s.brain.model : "quick mode"];
+  const res = ["", "ON", `${s.apps.filter(a => a.tier !== "blocked").length} connected · ${s.apps.filter(a => a.tier === "blocked").length} locked`, "OK", "/mcp ready", s.brain.on ? "Claude Code" : "offline"];
   requestAnimationFrame(() => $(".boot-bar i").style.width = "100%");
   const skip = LS.get("jassi.booted") === new Date().toDateString();
   for (let i = 0; i < lines.length; i++) {

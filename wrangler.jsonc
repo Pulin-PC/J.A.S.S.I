@@ -1,0 +1,11 @@
+{
+  // J.A.S.S.I on Cloudflare Workers. Deploy: npx wrangler deploy
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "jassi",
+  "main": "worker/index.js",
+  "compatibility_date": "2025-09-01",
+  "assets": { "directory": "./public", "binding": "ASSETS" },
+  "durable_objects": { "bindings": [{ "name": "HUB", "class_name": "JassiHub" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["JassiHub"] }],
+  "observability": { "enabled": true }
+}

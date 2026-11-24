@@ -6,7 +6,11 @@
   "private": true,
   "scripts": {
     "start": "node server/index.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "brain": "node brain/bridge.js",
+    "brain:cloud": "node brain/bridge.js cloud",
+    "cf:dev": "npx wrangler@4 dev",
+    "cf:deploy": "npx wrangler@4 deploy"
   },
   "engines": {
     "node": ">=20"

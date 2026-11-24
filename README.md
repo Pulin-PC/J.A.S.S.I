@@ -4,6 +4,8 @@
 
 wHACKiest 2026 · Track 1: *Make MCP Matter* · Team J.A.S.S.I (MSRIT) — Round 1 prototype.
 
+**Live:** https://jassi.pulin-chaudhari.workers.dev (Cloudflare Workers + Durable Objects)
+
 ![J.A.S.S.I dashboard](docs/dashboard.jpg)
 
 > "Order my usual and put the delivery time in my calendar and WhatsApp Riya the ETA."
@@ -23,14 +25,15 @@ wHACKiest 2026 · Track 1: *Make MCP Matter* · Team J.A.S.S.I (MSRIT) — Round
 | **Diary you own** | Every action (done, declined or blocked) is written as an Obsidian-style markdown note on your device: `data/diary/YYYY-MM-DD.md`. |
 | **Business brief** | The first time you open it each day: sales vs usual, cash, overdue payments, low stock, quiet deals, meetings, and **3 next steps, one tap each**. |
 | **Voice in and out** | Talk with the mic (Chrome speech recognition, en-IN). Replies are spoken back. Or type with *Like voice* on to watch mid-sentence actions without a mic. |
-| **Thinking brain (optional)** | With an Anthropic key, questions and unknown tasks go to Claude with J.A.S.S.I's tools (plus `run_script` for Code Mode). Without a key it runs in quick mode. |
+| **Thinking brain = Claude Code** | Questions and tasks the quick parser doesn't know go to **Claude Code running on your Mac** (your own login, no API key; Haiku 5.5, medium effort). One warm process, so answers are fast. It acts only through J.A.S.S.I's MCP tools, so the same guard checks everything. Once it has read an email or page, its payments need your fingerprint. |
 
 ### Honest notes (Round 1)
 - **Payments are test mode**: a local ledger that follows the Razorpay / UPI Reserve Pay rules. No real money moves.
 - **Swiggy/Zomato and business data use a demo menu and demo numbers** (`data/demo.json`). In the product these come from the companies' official MCP servers.
 - WhatsApp, email, Maps, YouTube and search are **real links**: J.A.S.S.I fills them in and you tap the last button.
 - Calendar events are stored locally and download as real `.ics` files.
-- The Code Mode sandbox is `node:vm` with only `tools.*` in scope. That's fine for a prototype. Production would use an isolated worker.
+- Code Mode from your sentence runs everywhere. Free-form scripts written by an AI client (`run_script`) run only in the local version (`node:vm` sandbox, prototype). Cloudflare Workers don't allow running new code at runtime.
+- The brain runs on your Mac. If it's offline, everything except open questions still works.
 - The fingerprint is a hold-to-approve button that stands in for the phone's fingerprint prompt.
 
 ---
@@ -47,7 +50,7 @@ npm start
 
 Open **http://localhost:7777**. Tap the glowing core (or press **Space**) and talk, or type a command.
 
-Optional: copy `.env.example` to `.env` and add `ANTHROPIC_API_KEY` to turn on the thinking brain.
+`npm start` also starts the brain: Claude Code on this Mac with **your own login** (no API key). If Claude Code says you're logged out, run `claude` and type `/login`, or pin a long-lived token to your account with `zsh brain/link_claude.sh`. Model and effort: `JASSI_CLAUDE_MODEL` / `JASSI_CLAUDE_EFFORT` in `.env` (default Haiku 5.5, medium).
 
 **Try:**
 - `Order my usual and put the delivery time in my calendar and WhatsApp Riya the ETA`
@@ -55,6 +58,22 @@ Optional: copy `.env.example` to `.env` and add `ANTHROPIC_API_KEY` to turn on t
 - `Order lunch for the team` (₹6,840 → fingerprint)
 - `Pay 250 to Rahul for chai` (auto)
 - `Read my emails` (scam check) · `Open Google Pay` (locked) · `Send payment reminders` (needs your OK) · `Brief me`
+
+### Hosted on Cloudflare
+
+The same tools, guard and MCP code run on **Cloudflare Workers**. One **Durable Object** keeps the state, approvals, live updates and the diary (download it at `/api/diary.md`). The dashboard is served as static assets. No other database.
+
+```bash
+npx wrangler@4 login
+npx wrangler@4 deploy
+openssl rand -hex 24 | npx wrangler@4 secret put BRAIN_TOKEN   # private link for the brain
+```
+
+Then put `JASSI_CLOUD_URL=https://<your-worker>.workers.dev` and `JASSI_CLOUD_BRAIN_TOKEN=<same token>` in `.env`, and connect the brain from your Mac:
+
+```bash
+npm run brain:cloud
+```
 
 ### Use J.A.S.S.I from Claude Code (MCP)
 
@@ -77,14 +96,13 @@ npm test
 ```mermaid
 flowchart LR
   V["You: voice or text"] --> P["Reflex parser<br/>(acts mid-sentence)"]
-  V --> B["Thinking brain<br/>(Claude, optional)"]
+  V --> B["Thinking brain<br/>(Claude Code on your Mac)"]
   X["Any MCP client<br/>(Claude Code…)"] --> M["/mcp"]
   P --> G
-  B --> CM["Code Mode<br/>one script, many calls"]
-  P --> CM
+  B -->|MCP| M
+  P --> CM["Code Mode<br/>one script, many calls"]
   M --> G
   CM --> G{"Safety guard<br/>auto · yes/no · fingerprint · block"}
-  B --> G
   G -->|needs OK| A["Approval on<br/>phone / dashboard"]
   A --> T
   G -->|auto| T["App plugs<br/>Swiggy · Calendar · WhatsApp · Gmail<br/>Maps · YouTube · J.A.S.S.I Pay · Business"]
@@ -98,10 +116,14 @@ flowchart LR
 | `public/app.js`, `app.css`, `index.html` | The HUD: live speech, stability timer, action feed, Code Mode view, approvals, brief, timers. |
 | `server/guard.js` | The safety guard. All the rules live here. |
 | `server/tools.js` | The app plugs and `call()`, the single door every action goes through (guard → your OK → run → diary). |
-| `server/codemode.js` | Builds and runs Code Mode scripts in a sandbox. |
-| `server/brain.js` | Optional Claude brain with tool use. |
+| `server/codemode.js` | Builds Code Mode scripts from your sentence and runs them. |
+| `server/sandbox.js` | Free-form Code Mode scripts in a `node:vm` sandbox (local only). |
+| `server/brain.js` | Hands questions to the Claude Code brain and waits for its answer. |
+| `brain/bridge.js` | The brain: one warm Claude Code process on your Mac (your login), acting through J.A.S.S.I's MCP tools. |
 | `server/mcp.js` | MCP server (Streamable HTTP, JSON-RPC). |
-| `server/store.js` | Local state, approvals, live events, the markdown diary. |
+| `server/api.js`, `server/runtime.js` | API routes and shared runtime used by both hosts. |
+| `server/store.js`, `server/index.js` | Local host: files on your device, Node server. |
+| `worker/index.js`, `wrangler.jsonc` | Cloudflare host: Worker + Durable Object. |
 | `data/demo.json` | Demo contacts, menu, emails and business numbers. |
 
 **How "mid-sentence" works:** every time the speech engine sends new words, the whole sentence is parsed again into clauses (`open youtube` | `search for lofi beats` | `set a timer…`). A clause starts as soon as it is safe:
