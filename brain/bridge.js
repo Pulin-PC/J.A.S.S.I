@@ -163,22 +163,16 @@ function probe() {
 // ---------------------------------------------------------------- listen for questions (Server-Sent Events)
 async function listen() {
   for (let wait = 1000; ; wait = Math.min(wait * 2, 5000)) {
-    // A dropped line doesn't always reach us (e.g. when the site is redeployed or the Mac sleeps), so watch it:
-    // the server pings every 15 s; reconnect if we hear nothing for 25 s, if the Mac just woke up,
-    // or if the site says it can't see us (checked every 5 s, so any gap is a few seconds at most).
+    // A dropped line doesn't always reach us (e.g. when the site is redeployed or the Mac sleeps), so watch it locally,
+    // with no extra requests: the site pings down this open line every 10 s, so reconnect if we hear nothing for 18 s
+    // or if the Mac just woke up.
     const ac = new AbortController();
-    let lastData = Date.now(), lastTick = Date.now(), checking = false;
-    const watchdog = setInterval(async () => {
+    let lastData = Date.now(), lastTick = Date.now();
+    const watchdog = setInterval(() => {
       const now = Date.now(), gap = now - lastTick; lastTick = now;
       if (gap > 15000) return ac.abort(new Error("woke from sleep"));
-      if (now - lastData > 25000) return ac.abort(new Error("no ping for 25 s"));
-      if (checking) return;
-      checking = true;
-      try {
-        const h = await fetch(URL_ + "/api/brain/health", { headers: { authorization: "Bearer " + TOKEN }, signal: AbortSignal.timeout(4000) });
-        if (h.ok && (await h.json()).on === false) ac.abort(new Error("the site can't see the brain"));
-      } catch {} finally { checking = false; }
-    }, 5000);
+      if (now - lastData > 18000) return ac.abort(new Error("no ping for 18 s"));
+    }, 3000);
     try {
       const res = await fetch(URL_ + "/api/brain/listen", { headers: { authorization: "Bearer " + TOKEN, accept: "text/event-stream" }, signal: ac.signal });
       if (res.status === 401) { log("The server refused the brain token. Check JASSI_BRAIN_TOKEN."); process.exit(1); }

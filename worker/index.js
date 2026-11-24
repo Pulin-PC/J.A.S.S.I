@@ -21,7 +21,7 @@ function sse(bus, onClose) {
   const send = m => { w.write(enc.encode(m)).catch(close); };
   off = bus.add({ send });
   send(`event: hello\ndata: ${JSON.stringify({ at: Date.now() })}\n\n`);
-  ping = setInterval(() => send(": ping\n\n"), 15000);
+  ping = setInterval(() => send(": ping\n\n"), 10000);
   return new Response(readable, { headers: { "content-type": "text/event-stream", "cache-control": "no-cache" } });
 }
 const json = (obj, status = 200, headers = {}) => Response.json(obj, { status, headers });
@@ -220,7 +220,7 @@ export class JassiDirectory extends DurableObject {
       case "/brain/listen": return sse(this.brainBus);
       case "/brain/status": return json({ on: this.brainBus.size > 0 });
       case "/brain/ask": {
-        for (let i = 0; i < 48 && !this.brainBus.size; i++) await new Promise(r => setTimeout(r, 250));   // the brain reconnects within seconds after a redeploy
+        for (let i = 0; i < 80 && !this.brainBus.size; i++) await new Promise(r => setTimeout(r, 250));   // up to 20 s: the brain reconnects by itself within ~18 s of any drop
         if (!this.brainBus.size) return json({ say: "My thinking brain is offline right now. Direct commands still work." });
         const say = await new Promise(resolve => {
           const t = setTimeout(() => { this.waiting.delete(body.id); resolve("That took too long, so I stopped."); }, 180000);
