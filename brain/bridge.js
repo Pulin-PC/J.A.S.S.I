@@ -163,8 +163,21 @@ function probe() {
 // ---------------------------------------------------------------- listen for questions (Server-Sent Events)
 async function listen() {
   for (let wait = 1000; ; wait = Math.min(wait * 2, 15000)) {
+    // A dropped line doesn't always reach us (e.g. when the site is redeployed), so watch it:
+    // the server pings every 15 s; if we hear nothing for 40 s, or the site says it can't see us, reconnect.
+    const ac = new AbortController();
+    let lastData = Date.now();
+    const watchdog = setInterval(async () => {
+      if (Date.now() - lastData > 40000) return ac.abort(new Error("no ping for 40 s"));
+      if (Date.now() % 60000 < 5000) {
+        try {
+          const h = await fetch(URL_ + "/api/brain/health", { headers: { authorization: "Bearer " + TOKEN } });
+          if (h.ok && (await h.json()).on === false) ac.abort(new Error("the site can't see the brain"));
+        } catch {}
+      }
+    }, 5000);
     try {
-      const res = await fetch(URL_ + "/api/brain/listen", { headers: { authorization: "Bearer " + TOKEN, accept: "text/event-stream" } });
+      const res = await fetch(URL_ + "/api/brain/listen", { headers: { authorization: "Bearer " + TOKEN, accept: "text/event-stream" }, signal: ac.signal });
       if (res.status === 401) { log("The server refused the brain token. Check JASSI_BRAIN_TOKEN."); process.exit(1); }
       if (!res.ok || !res.body) throw new Error("HTTP " + res.status);
       log("connected to", URL_);
@@ -172,6 +185,7 @@ async function listen() {
       const dec = new TextDecoder();
       let sse = "";
       for await (const chunk of res.body) {
+        lastData = Date.now();
         sse += dec.decode(chunk, { stream: true });
         let i;
         while ((i = sse.indexOf("\n\n")) >= 0) {
@@ -183,8 +197,12 @@ async function listen() {
       }
       throw new Error("stream closed");
     } catch (e) {
-      log(`lost the server (${e.message}); retrying in ${Math.round(wait / 1000)} s`);
+      const why = ac.signal.aborted ? (ac.signal.reason?.message || "timed out") : e.message;
+      log(`lost the server (${why}); retrying in ${Math.round(wait / 1000)} s`);
       await new Promise(r => setTimeout(r, wait));
+    } finally {
+      clearInterval(watchdog);
+      ac.abort();
     }
   }
 }

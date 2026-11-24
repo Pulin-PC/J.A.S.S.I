@@ -308,6 +308,10 @@ export default {
 
     // ---------------------------------------------------------- the brain (owner's Mac) - needs the brain token
     const brainOk = !!env.BRAIN_TOKEN && bearerOf(req) === env.BRAIN_TOKEN;
+    if (p === "/api/brain/health") {   // for the brain on the Mac: does the site see me?
+      if (!brainOk) return json({ ok: false }, 401);
+      return dirOf(env).fetch("https://dir/brain/status");
+    }
     if (p === "/api/brain/listen" || p === "/api/brain/answer") {
       if (!brainOk) return json({ ok: false }, 401);
       return dirOf(env).fetch(new Request("https://dir/brain/" + (p.endsWith("listen") ? "listen" : "answer"), { method: req.method, body: req.method === "POST" ? await req.text() : undefined }));

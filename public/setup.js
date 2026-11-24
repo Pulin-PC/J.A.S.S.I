@@ -149,6 +149,7 @@ export function openSettings(tab = "account") {
   $("#settings-tabs").innerHTML = tabs.map(([id, l]) => `<button data-tab="${id}" class="${id === tab ? "on" : ""}">${l}</button>`).join("");
   $("#settings-tabs").onclick = e => { const b = e.target.closest("[data-tab]"); if (b) openSettings(b.dataset.tab); };
   const el = $("#settings-body");
+  el.onclick = el.onchange = null;
   const me = S.me || {};
   if (tab === "account") el.innerHTML = `
     <div class="acct">${me.picture ? `<img src="${esc(me.picture)}" alt="" referrerpolicy="no-referrer">` : `<span class="acct-i">${esc((me.name || "?")[0])}</span>`}
@@ -177,8 +178,8 @@ export function openSettings(tab = "account") {
     };
     return;
   }
-  if (tab === "invites") { invites(el); }
-  if (tab === "ai") { aiApps(el, S); }
+  if (tab === "invites") { el.onchange = null; return invites(el); }   // these tabs set their own click handlers
+  if (tab === "ai") { el.onclick = el.onchange = null; return aiApps(el, S); }
   if (tab === "data") el.innerHTML = `
     <div class="set-row"><span>Today's diary<small>Every action I took, as a markdown note (works in Obsidian). ${esc(S.diaryDir || "")}</small></span><a class="mini" href="/api/diary.md" download="jassi-diary.md">Download</a></div>
     <div class="set-row"><span>Start over with fresh demo data<small>Clears orders, payments, events and timers. Keeps your apps and money rules.</small></span><button class="mini danger" id="st-reset">Reset</button></div>`;
