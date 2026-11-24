@@ -220,6 +220,7 @@ export class JassiDirectory extends DurableObject {
       case "/brain/listen": return sse(this.brainBus);
       case "/brain/status": return json({ on: this.brainBus.size > 0 });
       case "/brain/ask": {
+        for (let i = 0; i < 48 && !this.brainBus.size; i++) await new Promise(r => setTimeout(r, 250));   // the brain reconnects within seconds after a redeploy
         if (!this.brainBus.size) return json({ say: "My thinking brain is offline right now. Direct commands still work." });
         const say = await new Promise(resolve => {
           const t = setTimeout(() => { this.waiting.delete(body.id); resolve("That took too long, so I stopped."); }, 180000);

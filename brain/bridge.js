@@ -30,7 +30,7 @@ const MODEL = process.env.JASSI_CLAUDE_MODEL || "claude-haiku-5-5";
 let EFFORT = process.env.JASSI_CLAUDE_EFFORT || "medium";
 const CLAUDE = process.env.CLAUDE_BIN || [path.join(os.homedir(), ".local/bin/claude"), "/opt/homebrew/bin/claude", "/usr/local/bin/claude"].find(p => fs.existsSync(p)) || "claude";
 const HOME = path.join(os.homedir(), ".jassi");
-const log = (...a) => console.log("  [brain]", ...a);
+const log = (...a) => console.log("  [brain]", new Date().toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata" }), ...a);
 
 if (!TOKEN) { log(CLOUD ? "Missing JASSI_CLOUD_URL / JASSI_CLOUD_BRAIN_TOKEN in .env." : "Missing JASSI_BRAIN_TOKEN. Just run npm start: it starts the brain for you."); process.exit(1); }
 
@@ -162,19 +162,22 @@ function probe() {
 
 // ---------------------------------------------------------------- listen for questions (Server-Sent Events)
 async function listen() {
-  for (let wait = 1000; ; wait = Math.min(wait * 2, 15000)) {
-    // A dropped line doesn't always reach us (e.g. when the site is redeployed), so watch it:
-    // the server pings every 15 s; if we hear nothing for 40 s, or the site says it can't see us, reconnect.
+  for (let wait = 1000; ; wait = Math.min(wait * 2, 5000)) {
+    // A dropped line doesn't always reach us (e.g. when the site is redeployed or the Mac sleeps), so watch it:
+    // the server pings every 15 s; reconnect if we hear nothing for 25 s, if the Mac just woke up,
+    // or if the site says it can't see us (checked every 5 s, so any gap is a few seconds at most).
     const ac = new AbortController();
-    let lastData = Date.now();
+    let lastData = Date.now(), lastTick = Date.now(), checking = false;
     const watchdog = setInterval(async () => {
-      if (Date.now() - lastData > 40000) return ac.abort(new Error("no ping for 40 s"));
-      if (Date.now() % 60000 < 5000) {
-        try {
-          const h = await fetch(URL_ + "/api/brain/health", { headers: { authorization: "Bearer " + TOKEN } });
-          if (h.ok && (await h.json()).on === false) ac.abort(new Error("the site can't see the brain"));
-        } catch {}
-      }
+      const now = Date.now(), gap = now - lastTick; lastTick = now;
+      if (gap > 15000) return ac.abort(new Error("woke from sleep"));
+      if (now - lastData > 25000) return ac.abort(new Error("no ping for 25 s"));
+      if (checking) return;
+      checking = true;
+      try {
+        const h = await fetch(URL_ + "/api/brain/health", { headers: { authorization: "Bearer " + TOKEN }, signal: AbortSignal.timeout(4000) });
+        if (h.ok && (await h.json()).on === false) ac.abort(new Error("the site can't see the brain"));
+      } catch {} finally { checking = false; }
     }, 5000);
     try {
       const res = await fetch(URL_ + "/api/brain/listen", { headers: { authorization: "Bearer " + TOKEN, accept: "text/event-stream" }, signal: ac.signal });
