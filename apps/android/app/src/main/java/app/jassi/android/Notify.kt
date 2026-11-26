@@ -16,7 +16,7 @@ object Notify {
 
     fun show(context: Context, title: String, body: String): JSONObject {
         val manager = NotificationManagerCompat.from(context)
-        if (!manager.areNotificationsEnabled()) return fail("not_allowed")
+        if (!manager.areNotificationsEnabled()) return fail("permission")
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL, context.getString(R.string.alerts), NotificationManager.IMPORTANCE_DEFAULT)
         )
@@ -36,7 +36,7 @@ object Notify {
             manager.notify(nextId++, notification)
             ok()
         } catch (_: SecurityException) {
-            fail("not_allowed")
+            fail("permission")
         }
     }
 }

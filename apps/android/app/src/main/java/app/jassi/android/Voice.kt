@@ -22,7 +22,7 @@ class Voice(private val activity: MainActivity) {
 
     fun listenStart(lang: String?): JSONObject {
         if (!SpeechRecognizer.isRecognitionAvailable(activity)) return fail("unsupported")
-        if (!activity.hasMic()) return fail("mic_not_allowed")
+        if (!activity.hasMic()) return fail("permission")
         recognizer?.destroy()
         val r = SpeechRecognizer.createSpeechRecognizer(activity)
         recognizer = r
@@ -77,7 +77,7 @@ class Voice(private val activity: MainActivity) {
     private fun reason(error: Int): String = when (error) {
         SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "no_speech"
         SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT, SpeechRecognizer.ERROR_SERVER -> "network"
-        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "mic_not_allowed"
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "permission"
         SpeechRecognizer.ERROR_AUDIO -> "audio"
         else -> "failed"
     }
@@ -85,7 +85,7 @@ class Voice(private val activity: MainActivity) {
     // ── speaking ────────────────────────────────────────────────────────────────────────────
 
     fun speak(text: String, lang: String?, done: Reply) {
-        if (text.isBlank()) return done(fail("bad_request"))
+        if (text.isBlank()) return done(fail("bad_args"))
         val say = { ttsThread.execute { done(say(text, lang)) } }
         when {
             ttsReady -> say()

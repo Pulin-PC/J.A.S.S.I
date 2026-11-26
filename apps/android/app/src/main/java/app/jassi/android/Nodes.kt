@@ -60,7 +60,7 @@ object Nodes {
     fun role(node: RawNode): String {
         val type = node.className.orEmpty().substringAfterLast('.')
         return when {
-            node.editable -> "input"
+            node.editable -> "field"
             "CheckBox" in type -> "checkbox"
             "Switch" in type || "Toggle" in type -> "switch"
             "RadioButton" in type -> "radio"
@@ -89,11 +89,11 @@ object Nodes {
             .put("role", role(node))
             .put("text", if (secure) "" else redact(shown).take(MAX_TEXT))
         if (!node.hint.isNullOrBlank()) o.put("hint", node.hint.take(MAX_TEXT))
+        else if (node.checkable) o.put("hint", if (node.checked) "on" else "off")   // tick boxes and switches say on / off
         if (node.editable) o.put("editable", true)
         if (node.clickable) o.put("clickable", true)
         if (node.focused) o.put("focused", true)
         if (secure) o.put("secure", true)
-        if (node.checkable) o.put("checked", node.checked)
         return o.put("bounds", JSONArray(listOf(node.x, node.y, node.w, node.h)))
     }
 }

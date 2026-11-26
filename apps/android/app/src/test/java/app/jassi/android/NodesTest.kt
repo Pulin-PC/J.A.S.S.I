@@ -29,7 +29,7 @@ class NodesTest {
     }
 
     @Test fun `roles are plain words`() {
-        assertEquals("input", Nodes.role(RawNode(className = "android.widget.EditText", editable = true)))
+        assertEquals("field", Nodes.role(RawNode(className = "android.widget.EditText", editable = true)))
         assertEquals("button", Nodes.role(RawNode(className = "android.widget.Button")))
         assertEquals("button", Nodes.role(RawNode(className = "android.widget.ImageButton")))
         assertEquals("radio", Nodes.role(RawNode(className = "android.widget.RadioButton")))
@@ -45,7 +45,7 @@ class NodesTest {
         val o = Nodes.toJson(7, RawNode(className = "android.widget.EditText", text = "Asha", hint = "Name",
             editable = true, clickable = true, focused = true, x = 10, y = 20, w = 300, h = 40))
         assertEquals(7, o.getInt("n"))
-        assertEquals("input", o.getString("role"))
+        assertEquals("field", o.getString("role"))
         assertEquals("Asha", o.getString("text"))
         assertEquals("Name", o.getString("hint"))
         assertTrue(o.getBoolean("editable") && o.getBoolean("clickable") && o.getBoolean("focused"))
@@ -56,16 +56,16 @@ class NodesTest {
     @Test fun `flags that are false are left out, and a picture uses its description`() {
         val o = Nodes.toJson(0, RawNode(className = "android.widget.ImageView", description = "Profile photo"))
         assertEquals("Profile photo", o.getString("text"))
-        for (flag in listOf("editable", "clickable", "focused", "secure", "hint", "checked")) assertFalse(flag, o.has(flag))
+        for (flag in listOf("editable", "clickable", "focused", "secure", "hint")) assertFalse(flag, o.has(flag))
     }
 
     @Test fun `text is cut at 200 characters`() {
         assertEquals(200, Nodes.toJson(0, RawNode(text = "a".repeat(500))).getString("text").length)
     }
 
-    @Test fun `a tick box reports whether it is ticked`() {
-        assertTrue(Nodes.toJson(0, RawNode(className = "android.widget.CheckBox", checkable = true, checked = true)).getBoolean("checked"))
-        assertFalse(Nodes.toJson(0, RawNode(className = "android.widget.CheckBox", checkable = true)).getBoolean("checked"))
+    @Test fun `a tick box says on or off in its hint`() {
+        assertEquals("on", Nodes.toJson(0, RawNode(className = "android.widget.CheckBox", checkable = true, checked = true)).getString("hint"))
+        assertEquals("off", Nodes.toJson(0, RawNode(className = "android.widget.CheckBox", checkable = true)).getString("hint"))
     }
 
     // ── secrets never leave the phone ───────────────────────────────────────────────────────

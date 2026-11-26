@@ -167,7 +167,7 @@ class ScreenService : AccessibilityService() {
         "screen_act" -> act(args)
         "open_app" -> openApp(args.optString("id"))
         "list_apps" -> success(Apps.json(this))
-        else -> failure("unsupported")
+        else -> failure("unknown_op")
     }
 
     private class Front(val root: AccessibilityNodeInfo, val packageName: String) {
@@ -262,7 +262,7 @@ class ScreenService : AccessibilityService() {
     }
 
     private fun tap(args: JSONObject, front: Front): String? {
-        var target: AccessibilityNodeInfo? = node(args, front) ?: return "stale_node"
+        var target: AccessibilityNodeInfo? = node(args, front) ?: return "stale"
         repeat(8) {
             val t = target ?: return "not_clickable"
             if (t.isClickable) return if (t.performAction(AccessibilityNodeInfo.ACTION_CLICK)) null else "failed"
@@ -272,7 +272,7 @@ class ScreenService : AccessibilityService() {
     }
 
     private fun type(args: JSONObject, front: Front): String? {
-        val field = (if (args.has("n")) node(args, front) ?: return "stale_node" else front.root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT))
+        val field = (if (args.has("n")) node(args, front) ?: return "stale" else front.root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT))
             ?: return "no_field"
         if (!field.isEditable) return "not_editable"
         if (Nodes.isSecure(raw(field))) return "secure_field"
@@ -296,7 +296,7 @@ class ScreenService : AccessibilityService() {
             "right" -> AccessibilityAction.ACTION_SCROLL_RIGHT
             else -> return "bad_dir"
         }
-        var list: AccessibilityNodeInfo? = if (args.has("n")) node(args, front) ?: return "stale_node" else firstScrollable(front.root)
+        var list: AccessibilityNodeInfo? = if (args.has("n")) node(args, front) ?: return "stale" else firstScrollable(front.root)
         while (list != null && !list.isScrollable) list = list.parent
         val target = list ?: return "not_scrollable"
         val forward = dir == "down" || dir == "right"
@@ -320,7 +320,7 @@ class ScreenService : AccessibilityService() {
 
     private fun openApp(id: String): JSONObject {
         val target = id.trim().lowercase()
-        if (target.isEmpty()) return failure("bad_request")
+        if (target.isEmpty()) return failure("bad_args")
         Policy.refusal(target, Vault.blockedApps(this), packageName)?.let { return failure(it) }
         if (!Apps.open(this, target)) return failure("not_found")
         val start = SystemClock.uptimeMillis()

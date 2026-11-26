@@ -117,7 +117,7 @@ class Bridge(private val activity: MainActivity, private val web: WebView) {
                 ScreenService.instance?.stopFromWeb()
                 done(ok())
             }
-            else -> done(fail("unsupported"))
+            else -> done(fail("unknown_method"))
         }
     }
 
@@ -125,7 +125,7 @@ class Bridge(private val activity: MainActivity, private val web: WebView) {
         val server = o.optString("server")
         val deviceId = o.optString("deviceId")
         val token = o.optString("token")
-        if (deviceId.isBlank() || token.isBlank()) return fail("bad_request")
+        if (deviceId.isBlank() || token.isBlank()) return fail("bad_args")
         if (!Origins.serverAllowed(server, BuildConfig.JASSI_URL, BuildConfig.DEBUG)) return fail("bad_server")
         Vault.save(activity, Vault.Pairing(Origins.of(server)!!, deviceId, token))
         DeviceChannel.refresh(activity)   // starts now if screen control is on, otherwise when the user switches it on

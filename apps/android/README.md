@@ -67,6 +67,9 @@ curl -s -X POST localhost:8787/dev/op -d '{"op":"screen_act","args":{"action":"t
 - **The device channel only talks to the site the app was built for** (`JASSI_URL`), or to `localhost` in debug builds. `pair()` with any other server answers `bad_server`.
 - `listApps()` adds `locked: true` to apps this phone will always refuse, so the setup screen can grey them out.
 - `screen_read` on a protected screen answers `{ app, nodes: [], protected: true }`.
+- **Error words** (kept the same as the desktop and iPhone shells). Bridge: `unsupported`, `unknown_method`, `bad_args`, `permission`, `cancelled`, `failed`, plus `bad_server`, `bad_url`, `not_set_up` (no fingerprint saved). Device ops: `blocked_app`, `secure_field`, `protected_screen`, `stopped`, `timeout`, `stale`, `unknown_op`, `bad_args`, `not_found`, `unsupported`, `failed`, plus `not_clickable`, `not_editable`, `no_field`, `not_scrollable`, `cant_scroll`, `not_opened`, `no_screen`, `no_banner`.
+- **Node roles**: `text`, `field`, `button`, `checkbox`, `radio`, `switch`, `image`, `scroll`, `item`, `group`. Tick boxes and switches say `on` / `off` in `hint`.
+- **`no_banner`** means Android would not let the service draw the Stop banner, so it refuses to act. Seen once, when Android had flagged the service as crashed; switching J.A.S.S.I off and on under Accessibility cleared it.
 
 ## Before release: the owner's to-do
 
