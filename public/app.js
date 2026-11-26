@@ -1,5 +1,5 @@
 // J.A.S.S.I dashboard: live speech -> reflex parser (mid-sentence) -> server tools (through the safety guard).
-import { Parser, STABLE_MS } from "./reflex.js";
+import { Parser, STABLE_MS, ENGINES, SITES } from "./reflex.js";
 import { initSetup, showSignin, openOnboarding, openSettings, closeSettings } from "./setup.js";
 import { native, onNative } from "./native.js";
 
@@ -110,6 +110,9 @@ function words(s) {
 }
 
 // ================================================================ the utterance engine (mid-sentence actions)
+const ENGINE_LIST = ENGINES.split("|");
+const searchFollows = (steps, i) => steps[i].kind === "open_app" && steps[i + 1]?.kind === "search" && steps[i + 1].args.engine === steps[i].args.app;
+
 class Utterance {
   constructor(source) {
     this.source = source; this.t0 = performance.now(); this.fired = new Map(); this.firstSeen = new Map();
@@ -123,6 +126,11 @@ class Utterance {
     const now = performance.now();
     steps.forEach((st, i) => {
       if (this.fired.has(i)) return;
+      // "open youtube and type X": the search opens YouTube itself, so there is one tab, not two
+      if (searchFollows(steps, i)) { this.fired.set(i, "merged"); return; }
+      // The native apps hand every link to the system browser (a new tab each time): a site with search
+      // waits until it's clear whether a search on it follows.
+      if (native && st.kind === "open_app" && ENGINE_LIST.includes(st.args.app) && !ended && !steps.slice(i + 1).some(s => s.kind !== "unknown")) return;
       const closed = ended || i < steps.length - 1;
       if (["unknown", "ask", "stop"].includes(st.kind) || st.dep || st.hold) return;   // handled at the end
       if (!closed) {
@@ -164,7 +172,7 @@ class Utterance {
     // already done, instead of me guessing at the clear parts and leaving holes.
     if (thinking.length) {
       rest.forEach(([, i]) => this.fired.set(i, true));
-      const done = this.steps.filter((s, i) => !rest.some(([, j]) => j === i)).map(s => s.clause);
+      const done = this.steps.filter((s, i) => this.fired.get(i) !== "merged" && !rest.some(([, j]) => j === i)).map(s => s.clause);
       return askBrain(done.length ? `${this.text}\n[Already done by J.A.S.S.I, don't repeat: ${done.join("; ")}]` : this.text);
     }
     const actions = rest;
@@ -237,9 +245,17 @@ async function openLink(url, r, clicked) {
     return void native.openExternal(href);
   }
   if (app) return tryApp(app, href);
-  const w = window.open(url, "_blank", "noopener");
+  // A site with search (YouTube, Google…) that I opened a moment ago: go to the new page in that same tab.
+  const host = new URL(href).host, prev = siteTabs.get(host);
+  if (prev && !prev.closed) { try { prev.location.href = href; prev.focus(); return; } catch {} }
+  const reuse = SEARCH_HOSTS.has(host);   // only these big sites keep a link back to this tab; every other site opens fully apart
+  const w = window.open(href, "_blank", reuse ? "" : "noopener");
+  if (w && reuse) siteTabs.set(host, w);
   if (!w && !openLink.warned) { openLink.warned = true; toast("Pop-ups blocked", "Use the button on the action card, or allow pop-ups for this page."); }
 }
+
+const siteTabs = new Map();
+const SEARCH_HOSTS = new Set(ENGINE_LIST.map(e => SITES[e] && new URL(SITES[e]).host).filter(Boolean));
 
 // WhatsApp opens in the installed app; the web version is only the fallback.
 function waApp(url) {

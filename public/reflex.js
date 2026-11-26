@@ -36,7 +36,7 @@ export const SITES = {
 // Short names people say for an app.
 const APP_ALIAS = { yt: "youtube", "you tube": "youtube", "yt music": "youtube music", gmaps: "google maps", insta: "instagram", wa: "whatsapp" };
 
-const ENGINES ="google|youtube|amazon|flipkart|wikipedia|github|reddit|linkedin|spotify|maps|google maps|swiggy|zomato";
+export const ENGINES = "google|youtube|amazon|flipkart|wikipedia|github|reddit|linkedin|spotify|maps|google maps|swiggy|zomato";
 
 export class Step {
   constructor(kind, args = {}, opts = {}) {
