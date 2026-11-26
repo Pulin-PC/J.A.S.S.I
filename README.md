@@ -13,6 +13,75 @@ wHACKiest 2026 · Track 1: *Make MCP Matter* · Team J.A.S.S.I (MSRIT) — Round
 
 ---
 
+## Download
+
+| Device | Get it | Needs |
+|---|---|---|
+| **Android** | [**JASSI-android.apk**](https://github.com/Pulin-PC/J.A.S.S.I/releases/latest/download/JASSI-android.apk) | Android 8.0 or newer |
+| **Mac** (Apple silicon and Intel) | [**JASSI-macos.dmg**](https://github.com/Pulin-PC/J.A.S.S.I/releases/latest/download/JASSI-macos.dmg) | macOS 11 or newer |
+| **Windows** (not yet tried on a real PC) | [**JASSI-windows-setup.exe**](https://github.com/Pulin-PC/J.A.S.S.I/releases/latest/download/JASSI-windows-setup.exe) | Windows 10 or 11, 64-bit |
+| **iPhone** | No download yet: [build it with Xcode](#iphone) or [add the web app to your Home Screen](#iphone) | iOS 17 or newer for the app |
+| **Any other device** (Linux, iPad, Chromebook…) | [Open the web app](https://jassi.pulin-chaudhari.workers.dev) | A modern browser (Chrome for voice) |
+
+All versions are on the [Releases page](https://github.com/Pulin-PC/J.A.S.S.I/releases). Every app signs in with Google and is **invite only**: ask the owner for an invite link first.
+
+These are **test builds**: they are not signed with a store or developer identity, so your device warns you once. Install them only from this page.
+
+## Installation guides
+
+### Android
+
+1. On the phone, download [JASSI-android.apk](https://github.com/Pulin-PC/J.A.S.S.I/releases/latest/download/JASSI-android.apk).
+2. Open the downloaded file. If Android asks, allow your browser (or Files app) to **install unknown apps**, then press **Install**. If Play Protect warns you, choose **More details → Install anyway**.
+3. Open **J.A.S.S.I**, sign in with Google and follow the setup screens (microphone, alerts).
+4. **For screen control** (optional): turn J.A.S.S.I on under **Settings → Accessibility**. On Android 13 or newer you may first see **Restricted setting**. Then open **Settings → Apps → J.A.S.S.I → ⋮ → Allow restricted settings**, confirm with your PIN or fingerprint, and go back to Accessibility.
+5. Set up a fingerprint or face on the phone to approve payments with it.
+
+Tested on an emulator (Android 16), not yet across real phone brands. Some phones' battery savers may stop screen control. Phones with Advanced Protection on will refuse it.
+
+### Mac
+
+1. Download [JASSI-macos.dmg](https://github.com/Pulin-PC/J.A.S.S.I/releases/latest/download/JASSI-macos.dmg), open it and drag **J.A.S.S.I** into **Applications**.
+2. Open it once. macOS says it can't check the app: press **Done**, then go to **System Settings → Privacy & Security**, scroll down and press **Open Anyway**. (On macOS 14 or older: right-click the app → **Open**.)
+3. If macOS says the app is **damaged**, run this in Terminal, then open it again:
+   ```bash
+   xattr -dr com.apple.quarantine "/Applications/J.A.S.S.I.app"
+   ```
+4. Sign in with Google (it opens your browser and comes back to the app).
+5. Allow **Microphone**, **Speech Recognition** and **Notifications** when asked. For screen control, turn J.A.S.S.I on under **System Settings → Privacy & Security → Accessibility**. After installing an update you may need to grant it again.
+
+Payments are approved with Touch ID where the Mac has it. While J.A.S.S.I works another app, stop it with the **Stop** banner or **Control + Option + Esc**.
+
+### Windows
+
+> The Windows app is built automatically by GitHub and **has not been tested on a real PC yet**. If something fails, use the web app.
+
+1. Download [JASSI-windows-setup.exe](https://github.com/Pulin-PC/J.A.S.S.I/releases/latest/download/JASSI-windows-setup.exe) and run it.
+2. If **Windows protected your PC** appears, press **More info → Run anyway**.
+3. Follow the installer, open **J.A.S.S.I** from the Start menu and sign in with Google.
+4. Allow the microphone (**Settings → Privacy & security → Microphone**). Set up **Windows Hello** to approve payments with it.
+
+Stop screen control with the **Stop** banner or **Ctrl + Alt + Esc**. J.A.S.S.I cannot click inside programs running as administrator.
+
+### iPhone
+
+**Quickest (no install):** open <https://jassi.pulin-chaudhari.workers.dev> in **Safari**, tap **Share → Add to Home Screen**. It opens like an app. Payments are approved by holding the on-screen button.
+
+**Native app** (Face ID / Touch ID, Siri). Apple only allows installing it through Xcode or the App Store, so there is no file to download. You need a Mac with Xcode 16 or newer, a cable and an Apple ID (free works).
+
+1. Get the code:
+   ```bash
+   git clone -b native-ios https://github.com/Pulin-PC/J.A.S.S.I.git jassi-ios
+   ```
+2. Open `jassi-ios/apps/ios/JASSI.xcodeproj` in Xcode.
+3. Add your Apple ID under **Xcode → Settings → Accounts**. In the **JASSI** target's **Signing & Capabilities** tab, pick your **Team** and change the **Bundle Identifier** to something unique (for example `com.yourname.jassi`).
+4. Connect the iPhone, turn on **Settings → Privacy & Security → Developer Mode** on it, choose it as the run destination and press **Run**.
+5. If the app won't open, trust your certificate under **Settings → General → VPN & Device Management**.
+
+With a free Apple ID the app stops opening after 7 days; press **Run** again to renew it. Apple does not let any iPhone app control other apps, so screen control is not available on iPhone. The app has been tested in the Simulator only.
+
+---
+
 ## What works in this prototype
 
 | Feature | What you see |
@@ -37,7 +106,7 @@ wHACKiest 2026 · Track 1: *Make MCP Matter* · Team J.A.S.S.I (MSRIT) — Round
 - Calendar events are stored locally and download as real `.ics` files.
 - Code Mode from your sentence runs everywhere. Free-form scripts written by an AI client (`run_script`) run only in the local version (`node:vm` sandbox, prototype). Cloudflare Workers don't allow running new code at runtime.
 - The brain runs on your Mac. If it's offline, everything except open questions still works.
-- The fingerprint is a hold-to-approve button that stands in for the phone's fingerprint prompt.
+- The native apps approve with the device's own fingerprint or face prompt. In a plain browser, or on a device with no sensor, it is a hold-to-approve button.
 
 ---
 
@@ -156,7 +225,7 @@ flowchart LR
 - **money and dependent steps** ("the ETA") wait for the end of the sentence and run together as one Code Mode script.
 
 ## What's next (final round)
-Real official MCP plugs (Swiggy, Zomato, Google, Razorpay test keys), the phone app for approvals with a real fingerprint (AWS relay), ElevenLabs voice, and Graphify memory over the diary.
+Real official MCP plugs (Swiggy, Zomato, Google, Razorpay test keys), signed store builds, approvals sent to your phone (AWS relay), ElevenLabs voice, and Graphify memory over the diary.
 
 ---
 MIT licence · Built for wHACKiest 2026 (CodeRIT, Ramaiah Institute of Technology).
