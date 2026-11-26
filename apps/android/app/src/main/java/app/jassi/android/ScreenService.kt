@@ -10,6 +10,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
+import android.view.View
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction
@@ -47,6 +48,7 @@ class ScreenService : AccessibilityService() {
     private val worker = Executors.newSingleThreadExecutor()
     private lateinit var banner: Banner
     private var lastNodes: List<AccessibilityNodeInfo> = emptyList()   // worker thread only; in memory until the next read, never written anywhere
+    private var lastApp: String? = null                                // the app the last read looked at; actions only ever go there
 
     @Volatile private var lastChange = 0L
     @Volatile private var running: Future<JSONObject>? = null
@@ -80,7 +82,10 @@ class ScreenService : AccessibilityService() {
         if (instance === this) instance = null
         DeviceChannel.stop()
         running?.cancel(true)
-        worker.execute { lastNodes = emptyList() }
+        worker.execute {
+            lastNodes = emptyList()
+            lastApp = null
+        }
         main.post { if (::banner.isInitialized) banner.hide() }
     }
 
@@ -188,6 +193,7 @@ class ScreenService : AccessibilityService() {
 
     private fun read(): JSONObject {
         lastNodes = emptyList()
+        lastApp = null
         val front = front() ?: return failure("no_screen")
         val data = JSONObject().put("app", JSONObject().put("id", front.id).put("name", Apps.name(this, front.packageName)))
         when (refusal(front.id)) {
@@ -210,6 +216,7 @@ class ScreenService : AccessibilityService() {
             for (i in node.childCount - 1 downTo 0) node.getChild(i)?.let { todo.add(it) }
         }
         lastNodes = kept
+        lastApp = front.id
         return success(data.put("nodes", nodes))
     }
 
@@ -234,8 +241,11 @@ class ScreenService : AccessibilityService() {
     }
 
     private fun act(args: JSONObject): JSONObject {
-        val front = front() ?: return failure("no_screen")
+        var front = front() ?: return failure("no_screen")
+        // The user came back to J.A.S.S.I to tap "Yes, do it": step out of the way and carry on where we were looking.
+        if (front.id == packageName.lowercase() && lastApp != null) front = stepAside() ?: return failure("stale")
         refusal(front.id)?.let { return failure(it) }
+        if (front.id != lastApp) return failure("stale")   // never act in an app we have not just looked at
         val error = when (args.optString("action")) {
             "tap" -> tap(args, front)
             "type" -> type(args, front)
@@ -244,7 +254,8 @@ class ScreenService : AccessibilityService() {
             "home" -> global(GLOBAL_ACTION_HOME)
             "key" -> when (args.optString("key").lowercase()) {
                 "enter" -> enter(front)
-                "back" -> global(GLOBAL_ACTION_BACK)
+                "tab" -> nextField(front)
+                "escape", "back" -> global(GLOBAL_ACTION_BACK)   // Android's Escape is Back
                 "home" -> global(GLOBAL_ACTION_HOME)
                 else -> "unsupported"
             }
@@ -253,6 +264,27 @@ class ScreenService : AccessibilityService() {
         if (error != null) return failure(error)
         settle()
         return done()
+    }
+
+    /** Puts J.A.S.S.I's own window behind the app we last looked at. Null when that app can't be brought back. */
+    private fun stepAside(): Front? {
+        val target = lastApp ?: return null
+        main.post { Shell.activity?.moveTaskToBack(true) }
+        val start = SystemClock.uptimeMillis()
+        var reopened = false
+        while (SystemClock.uptimeMillis() - start < 6_000) {
+            Thread.sleep(100)   // Stop interrupts this
+            val now = front()
+            if (now?.id == target) {
+                settle()
+                return front()?.takeIf { it.id == target }
+            }
+            if (!reopened && SystemClock.uptimeMillis() - start > 2_000) {   // something else was behind us: open the right app
+                reopened = true
+                if (!Apps.open(this, target)) return null
+            }
+        }
+        return null
     }
 
     /** Node `n` from the last read, if it is still on screen and still belongs to the app in front. */
@@ -276,6 +308,7 @@ class ScreenService : AccessibilityService() {
             ?: return "no_field"
         if (!field.isEditable) return "not_editable"
         if (Nodes.isSecure(raw(field))) return "secure_field"
+        field.performAction(AccessibilityNodeInfo.ACTION_FOCUS)   // so a following Enter or Tab applies to this box
         val text = Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, args.optString("text")) }
         return if (field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, text)) null else "failed"
     }
@@ -285,6 +318,13 @@ class ScreenService : AccessibilityService() {
         if (Nodes.isSecure(raw(field))) return "secure_field"
         if (Build.VERSION.SDK_INT < 30) return "unsupported"
         return if (field.performAction(AccessibilityAction.ACTION_IME_ENTER.id)) null else "failed"
+    }
+
+    /** Tab: move the typing cursor to the next box. */
+    private fun nextField(front: Front): String? {
+        val field = front.root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return "no_field"
+        val next = field.focusSearch(View.FOCUS_FORWARD)?.takeIf { it.packageName?.toString() == front.packageName } ?: return "no_field"
+        return if (next.performAction(AccessibilityNodeInfo.ACTION_FOCUS)) null else "failed"
     }
 
     private fun scroll(args: JSONObject, front: Front): String? {

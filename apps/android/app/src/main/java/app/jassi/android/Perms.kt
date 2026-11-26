@@ -32,20 +32,21 @@ object Perms {
         return on.split(':').any { ComponentName.unflattenFromString(it) == me }
     }
 
-    fun mic(activity: Activity) = runtime(activity, Manifest.permission.RECORD_AUDIO, "asked_mic")
+    fun mic(activity: Activity) = runtime(activity, Manifest.permission.RECORD_AUDIO, "mic")
 
     fun notifications(activity: Activity): String = when {
-        Build.VERSION.SDK_INT >= 33 -> runtime(activity, Manifest.permission.POST_NOTIFICATIONS, "asked_notifications")
+        Build.VERSION.SDK_INT >= 33 -> runtime(activity, Manifest.permission.POST_NOTIFICATIONS, "notifications")
         NotificationManagerCompat.from(activity).areNotificationsEnabled() -> "granted"
         else -> "denied"
     }
 
-    fun markAsked(context: Context, key: String) = Vault.prefs(context).edit().putBoolean(key, true).apply()
+    /** Remember that Android refused to even show its prompt for this permission: only Settings can change it now. */
+    fun setBlocked(context: Context, kind: String, blocked: Boolean) =
+        Vault.prefs(context).edit().putBoolean("blocked_$kind", blocked).apply()
 
-    private fun runtime(activity: Activity, permission: String, askedKey: String): String = when {
+    private fun runtime(activity: Activity, permission: String, kind: String): String = when {
         ContextCompat.checkSelfPermission(activity, permission) == PackageManager.PERMISSION_GRANTED -> "granted"
-        // Asked before, and Android will not show the prompt again: only Settings can change it now.
-        Vault.prefs(activity).getBoolean(askedKey, false) && !activity.shouldShowRequestPermissionRationale(permission) -> "denied"
+        Vault.prefs(activity).getBoolean("blocked_$kind", false) -> "denied"
         else -> "ask"
     }
 

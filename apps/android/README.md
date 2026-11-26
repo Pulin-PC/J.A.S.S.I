@@ -62,7 +62,10 @@ curl -s -X POST localhost:8787/dev/op -d '{"op":"screen_act","args":{"action":"t
 
 ## Choices worth knowing
 
-- **Taps use the app's own "click" action**, not a simulated finger. That is why the service does not ask Android for the "perform gestures" ability. Things on screen that offer no click action answer `not_clickable`.
+- **Taps use the app's own "click" action**, not a simulated finger. That is why the service does not ask Android for the "perform gestures" ability. Things on screen that offer no click action answer `not_clickable`. `key` takes `enter`, `tab` (next box) and `escape` (same as Back).
+- **Steps only run in the app J.A.S.S.I last looked at.** Anything else in front answers `stale`. If the user came back to J.A.S.S.I to tap "Yes, do it", J.A.S.S.I's window steps out of the way first and the step runs where it was looking.
+- **Typing puts the cursor in the box**, so a following Enter or Tab applies to it.
+- **Permission prompts**: one Android prompt at a time. `denied` is only reported when Android refuses to show its prompt; `openPermission` then opens the Settings page instead.
 - **The banner stays up for 8 seconds after each step** so it bridges the steps of one job. If the user touches the screen or taps Stop in that time, the next step is refused with `stopped`.
 - **The device channel only talks to the site the app was built for** (`JASSI_URL`), or to `localhost` in debug builds. `pair()` with any other server answers `bad_server`.
 - `listApps()` adds `locked: true` to apps this phone will always refuse, so the setup screen can grey them out.

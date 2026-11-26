@@ -35,7 +35,8 @@ object DeviceChannel {
         val thread = loop ?: return
         loop = null
         thread.interrupt()
-        Thread { open?.disconnect() }.start()
+        val waiting = open   // the old loop's request; a new loop must not lose its own
+        Thread { waiting?.disconnect() }.start()
     }
 
     private fun active() = loop === Thread.currentThread()

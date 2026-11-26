@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -49,9 +50,13 @@ class MainActivity : FragmentActivity() {
     private val askMic = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         webMicRequest?.let { if (granted) it.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) else it.deny() }
         webMicRequest = null
-        checkPermissions()
+        answered("mic", Manifest.permission.RECORD_AUDIO, granted)
     }
-    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { checkPermissions() }
+    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        answered("notifications", Manifest.permission.POST_NOTIFICATIONS, granted)
+    }
+    private var asking: String? = null   // one Android prompt at a time
+    private var askedAt = 0L
 
     // While the app is in front, look once a second so setup moves on by itself (contract §2, "permission").
     private val ticker = Handler(Looper.getMainLooper())
@@ -102,6 +107,7 @@ class MainActivity : FragmentActivity() {
         bridge = Bridge(this, web)
         bridge.install()
         Shell.bridge = bridge
+        Shell.activity = this
         web.webViewClient = Pages()
         web.webChromeClient = Chrome()
 
@@ -154,29 +160,40 @@ class MainActivity : FragmentActivity() {
     fun openPermission(kind: String): JSONObject {
         when (kind) {
             "screen" -> if (!Perms.openScreenSettings(this)) return fail("failed")
-            "mic", "speech" -> when {
-                kind == "speech" && Perms.snapshot(this).optString("speech") == "unsupported" -> return fail("unsupported")
-                Perms.mic(this) == "denied" -> Perms.openAppSettings(this)
-                else -> requestMic()
+            "mic", "speech" -> {
+                if (kind == "speech" && Perms.snapshot(this).optString("speech") == "unsupported") return fail("unsupported")
+                requestMic()
             }
-            "notifications" -> if (Build.VERSION.SDK_INT < 33 || Perms.notifications(this) == "denied") {
-                Perms.openNotificationSettings(this)
-            } else {
-                Perms.markAsked(this, "asked_notifications")
-                askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
+            "notifications" -> if (Build.VERSION.SDK_INT < 33) Perms.openNotificationSettings(this) else ask("notifications")
             else -> return fail("unsupported")
         }
         return ok()
     }
 
-    private fun requestMic() {
-        Perms.markAsked(this, "asked_mic")
-        askMic.launch(Manifest.permission.RECORD_AUDIO)
+    private fun requestMic() = ask("mic")
+
+    private fun ask(kind: String) {
+        if (asking != null) return   // Android can only show one prompt at a time
+        asking = kind
+        askedAt = SystemClock.elapsedRealtime()
+        if (kind == "mic") askMic.launch(Manifest.permission.RECORD_AUDIO) else askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    /** A "no" that comes back at once, with no prompt shown, means Android will not ask any more: open Settings instead. */
+    private fun answered(kind: String, permission: String, granted: Boolean) {
+        val instant = SystemClock.elapsedRealtime() - askedAt < 700
+        asking = null
+        val blocked = !granted && instant && !shouldShowRequestPermissionRationale(permission)
+        Perms.setBlocked(this, kind, blocked)
+        if (blocked) {
+            if (kind == "mic") Perms.openAppSettings(this) else Perms.openNotificationSettings(this)
+        }
+        checkPermissions()
     }
 
     override fun onDestroy() {
         if (Shell.bridge === bridge) Shell.bridge = null
+        if (Shell.activity === this) Shell.activity = null
         voice.shutDown()
         web.destroy()
         super.onDestroy()
@@ -265,6 +282,8 @@ class MainActivity : FragmentActivity() {
                 request.deny()
             } else if (hasMic()) {
                 request.grant(arrayOf(mic))
+            } else if (asking != null) {
+                request.deny()   // another Android prompt is already open
             } else {
                 webMicRequest?.deny()
                 webMicRequest = request

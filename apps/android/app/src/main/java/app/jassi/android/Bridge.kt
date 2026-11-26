@@ -20,6 +20,9 @@ fun fail(error: String): JSONObject = JSONObject().put("ok", false).put("error",
 object Shell {
     @Volatile
     var bridge: Bridge? = null
+
+    @Volatile
+    var activity: MainActivity? = null
 }
 
 /**
