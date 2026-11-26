@@ -72,8 +72,19 @@ pub fn screen_state() -> &'static str {
     }
 }
 
-/// The system's own prompt (first time only), plus Privacy & Security → Accessibility on the right page.
+/// `identifier` in tauri.conf.json (a test keeps the two the same).
+const BUNDLE_ID: &str = "app.jassi.desktop";
+
+/// The system's own prompt, plus Privacy & Security → Accessibility on the right page.
+///
+/// macOS ties the grant to the app's signature. After an update signed differently, the old switch in Settings
+/// still shows "on" but no longer counts, and macOS never shows the prompt again, so setup waits forever.
+/// When we are not trusted, clear J.A.S.S.I's own entry first (never any other app's): the prompt comes back
+/// and Settings lists this build, ready to switch on.
 fn open_screen_permission() {
+    if bundled() && !unsafe { AXIsProcessTrusted() } {
+        let _ = Command::new("/usr/bin/tccutil").args(["reset", "Accessibility", BUNDLE_ID]).status();
+    }
     let key = unsafe { CFString::wrap_under_get_rule(kAXTrustedCheckOptionPrompt) };
     let options = CFDictionary::from_CFType_pairs(&[(key.as_CFType(), CFBoolean::true_value().as_CFType())]);
     unsafe { AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef()) };
@@ -148,4 +159,13 @@ pub fn notify(_app: &tauri::AppHandle, title: &str, body: &str) -> Result<(), &'
         UNUserNotificationCenter::currentNotificationCenter().addNotificationRequest_withCompletionHandler(&request, None);
     });
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn bundle_id_matches_the_config() {
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../../tauri.conf.json")).unwrap();
+        assert_eq!(conf["identifier"], super::BUNDLE_ID);
+    }
 }

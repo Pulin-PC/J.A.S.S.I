@@ -40,10 +40,16 @@ Run the tests (every safety rule as plain logic):
 cargo test
 ```
 
+Once per Mac, make this Mac's own signing certificate (free, stays on this Mac). `dev/env.sh` then signs every build with it, so macOS keeps the Accessibility, microphone and speech permissions across rebuilds instead of treating each build as a new app:
+
+```bash
+sh dev/local-signing.sh
+```
+
 Make the app (`J.A.S.S.I.app` on a Mac, an installer on Windows). `--debug` keeps it a dev build; drop it for a release build.
 
 ```bash
-cargo tauri build --debug --bundles app
+. dev/env.sh && cargo tauri build --debug --bundles app
 ```
 
 The app lands in `~/Library/Caches/jassi/desktop-target/debug/bundle/macos/J.A.S.S.I.app`. Use this, not `cargo run`, to try sign-in, alerts and listening: `jassi://` links, alert settings and the microphone prompt only exist for a real app bundle.
@@ -115,11 +121,11 @@ Nothing here is signed with a real identity. Dev builds run on your own Mac; oth
 
 **macOS**
 1. Join the Apple Developer Program (paid, yearly) and create a **Developer ID Application** certificate.
-2. In `tauri.conf.json` change `bundle.macOS.signingIdentity` from `"-"` to that certificate's name, then `cargo tauri build`.
+2. Set `APPLE_SIGNING_IDENTITY` to that certificate's name (it wins over the local certificate and the `"-"` in `tauri.conf.json`), then `cargo tauri build`.
 3. **Notarize** the app with Apple: with `APPLE_ID`, `APPLE_PASSWORD` (an app-specific password) and `APPLE_TEAM_ID` set, `cargo tauri build` does it. Ship the `.dmg`.
 4. Build once on Apple silicon and once for Intel, or `--target universal-apple-darwin` for both in one.
 5. Keep `entitlements.plist`: the app runs with Apple's hardened runtime, and without the microphone line in that file macOS refuses the microphone without asking.
-6. Signing matters for more than warnings. macOS ties the Accessibility, microphone and speech permissions to the app's signature: today's unsigned build loses them every time it is rebuilt (the switch in Settings stays on but stops working: remove J.A.S.S.I from the list and add it again). A build signed with your Developer ID keeps them across updates.
+6. Signing matters for more than warnings. macOS ties the Accessibility, microphone and speech permissions to the app's signature: a build signed ad hoc loses them every time it is rebuilt (the switch in Settings stays on but stops working). A build signed with your Developer ID keeps them across updates for every user. As a safety net for any build, the app clears its own stale Accessibility entry when it is not trusted and the person taps the permission button, so the system prompt and a fresh switch always come back (`src/platform/macos.rs`).
 
 **Why it can't go in the Mac App Store.** App Store apps must run in Apple's sandbox, and a sandboxed app is not allowed to read or control other apps through the Accessibility API or to send clicks and keys to them. That is the whole point of this app, so it ships outside the store (signed + notarized), like other automation tools.
 
