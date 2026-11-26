@@ -1,9 +1,12 @@
 //! J.A.S.S.I for macOS and Windows: a thin shell around the web app. See docs/native-contract.md.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod banner;
 mod bridge;
+mod channel;
 mod config;
 mod http;
+mod ops;
 mod platform;
 mod policy;
 mod shell;

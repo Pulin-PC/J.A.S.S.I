@@ -4,7 +4,7 @@
 use crate::policy::Policy;
 use crate::shell::{self, Shell};
 use crate::store::{self, Pairing};
-use crate::{config, platform, policy};
+use crate::{config, ops, platform, policy};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tauri::{AppHandle, State, Webview};
@@ -32,7 +32,11 @@ pub fn shell_connect(app: AppHandle, webview: Webview) -> Value {
 
 /// The Stop button on the "J.A.S.S.I is working" banner.
 #[tauri::command]
-pub fn banner_stop(_app: AppHandle) -> Value {
+pub fn banner_stop(app: AppHandle, webview: Webview) -> Value {
+    if webview.label() != "banner" {
+        return fail("not_allowed");
+    }
+    ops::user_stop(&app, true);
     ok()
 }
 
@@ -201,10 +205,11 @@ pub fn jn_notify(webview: Webview, shell: State<Shell>, args: NotifyArgs) -> Val
 
 /// Abort any running screen action now.
 #[tauri::command]
-pub fn jn_stop(webview: Webview, shell: State<Shell>) -> Value {
+pub fn jn_stop(app: AppHandle, webview: Webview, shell: State<Shell>) -> Value {
     if !shell.allows(&webview) {
         return fail("not_allowed");
     }
+    ops::user_stop(&app, false); // the web app asked, so it needs no `stopped` event back
     ok()
 }
 

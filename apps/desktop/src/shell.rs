@@ -2,13 +2,15 @@
 //! events to the web app, and `jassi://` links (docs/native-contract.md §1-§3).
 
 use crate::policy::Policy;
-use crate::{config, platform, policy, store};
+use crate::{banner, channel, config, ops, platform, policy, store};
 use serde_json::{json, Value};
+use std::sync::atomic::AtomicU64;
 use std::sync::{Mutex, RwLock};
 use std::time::{Duration, Instant};
 use tauri::ipc::CapabilityBuilder;
 use tauri::{AppHandle, Manager, Url, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_deep_link::DeepLinkExt;
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 /// What the bridge may call. Granted to the JASSI_URL origin only.
 const BRIDGE_COMMANDS: &[&str] = &[
@@ -49,6 +51,10 @@ pub struct Shell {
     pub policy: RwLock<Policy>,
     /// Paired with a server (the token itself stays in the Keychain / Credential Manager).
     pub paired: Mutex<bool>,
+    /// Bumped to stop the running device-channel loop.
+    pub channel: AtomicU64,
+    /// Stop / cancel state of the screen action that is running.
+    pub control: ops::Control,
 }
 
 impl Shell {
@@ -60,6 +66,8 @@ impl Shell {
             last_link: Mutex::new(None),
             policy: RwLock::new(Policy::default()),
             paired: Mutex::new(false),
+            channel: AtomicU64::new(0),
+            control: ops::Control::default(),
         }
     }
 
@@ -97,6 +105,20 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .on_navigation(move |url| stays_inside(&nav, url))
         .build()?;
     *app.state::<Shell>().start_url.lock().unwrap() = main.url().ok();
+    banner::create(app)?;
+
+    // The stop shortcut works from any app: Control + Option + Esc (Ctrl + Alt + Esc on Windows).
+    let stop = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Escape);
+    app.handle().plugin(
+        tauri_plugin_global_shortcut::Builder::new()
+            .with_handler(move |app, shortcut, event| {
+                if shortcut == &stop && event.state() == ShortcutState::Pressed {
+                    ops::user_stop(app, true);
+                }
+            })
+            .build(),
+    )?;
+    let _ = app.global_shortcut().register(stop); // if another app owns the shortcut, the banner's Stop still works
 
     // jassi:// links (contract §3). On Windows a link that starts the app arrives as `get_current`.
     let links = handle.clone();
@@ -126,13 +148,15 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Paired (now, or at an earlier launch).
-pub fn resume(app: &AppHandle, _pairing: store::Pairing) {
+/// Paired (now, or at an earlier launch): start the device channel.
+pub fn resume(app: &AppHandle, pairing: store::Pairing) {
     *app.state::<Shell>().paired.lock().unwrap() = true;
+    channel::start(app, pairing);
 }
 
-/// Unpair: forget the token.
+/// Unpair: stop the channel and forget the token.
 pub fn forget(app: &AppHandle) {
+    channel::stop(app);
     store::forget_pairing();
     *app.state::<Shell>().paired.lock().unwrap() = false;
 }

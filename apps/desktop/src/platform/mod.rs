@@ -15,3 +15,7 @@ pub struct Permissions {
 mod macos;
 #[cfg(target_os = "macos")]
 pub use macos::*;
+#[cfg(target_os = "macos")]
+mod macos_screen;
+#[cfg(target_os = "macos")]
+pub use macos_screen::*;

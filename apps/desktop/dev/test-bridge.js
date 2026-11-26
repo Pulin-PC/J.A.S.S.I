@@ -20,7 +20,7 @@
   await say("listenStop", await n.listenStop());
   await say("stop", await n.stop());
   await say("openPermission(unknown kind)", await n.openPermission("bogus"));
-  await say("pair(localhost stub)", await n.pair({ server: "http://localhost:8799", deviceId: "dev-mac", token: "dev-token" }));
+  await say("pair(localhost stub)", await n.pair({ server: "http://localhost:8911", deviceId: "dev-mac", token: "dev-token" }));
   await say("pair(plain http, not localhost)", await n.pair({ server: "http://example.com", deviceId: "x", token: "x" }));
   await say("unpair", await n.unpair());
   await say("done", true);

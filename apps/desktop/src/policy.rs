@@ -390,11 +390,6 @@ pub fn same_origin(a: &Url, b: &Url) -> bool {
     a.scheme() == b.scheme() && a.host_str() == b.host_str() && a.port_or_known_default() == b.port_or_known_default()
 }
 
-/// Is this page one of ours? Only then does it get the bridge and the events.
-pub fn is_jassi_page(page: &str, jassi: &Url) -> bool {
-    Url::parse(page).map(|u| same_origin(&u, jassi)).unwrap_or(false)
-}
-
 /// `openExternal` and outside links: only ordinary web, mail and phone links reach the default browser.
 pub fn external_ok(link: &str) -> bool {
     match Url::parse(link) {
@@ -582,12 +577,14 @@ mod tests {
     #[test]
     fn only_the_jassi_origin_gets_the_bridge() {
         let jassi = Url::parse("https://jassi.pulin-chaudhari.workers.dev").unwrap();
-        assert!(is_jassi_page("https://jassi.pulin-chaudhari.workers.dev/setup?x=1", &jassi));
-        assert!(!is_jassi_page("https://jassi.pulin-chaudhari.workers.dev.evil.com/", &jassi));
-        assert!(!is_jassi_page("http://jassi.pulin-chaudhari.workers.dev/", &jassi));
-        assert!(!is_jassi_page("https://accounts.google.com/", &jassi));
-        assert!(!is_jassi_page("tauri://localhost/index.html", &jassi));
-        assert!(!is_jassi_page("about:blank", &jassi));
+        let ours = |page: &str| same_origin(&Url::parse(page).unwrap(), &jassi);
+        assert!(ours("https://jassi.pulin-chaudhari.workers.dev/setup?x=1"));
+        assert!(!ours("https://jassi.pulin-chaudhari.workers.dev.evil.com/"));
+        assert!(!ours("http://jassi.pulin-chaudhari.workers.dev/"));
+        assert!(!ours("https://jassi.pulin-chaudhari.workers.dev:8443/"));
+        assert!(!ours("https://accounts.google.com/"));
+        assert!(!ours("tauri://localhost/index.html"));
+        assert!(!ours("about:blank"));
     }
 
     #[test]
