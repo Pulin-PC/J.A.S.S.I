@@ -40,6 +40,8 @@ class MainActivity : FragmentActivity() {
         private set
     lateinit var bridge: Bridge
         private set
+    lateinit var voice: Voice
+        private set
     private lateinit var errorScreen: View
     private var failed = false
     private var webMicRequest: PermissionRequest? = null
@@ -96,6 +98,7 @@ class MainActivity : FragmentActivity() {
         CookieManager.getInstance().setAcceptCookie(true)
         web.setBackgroundColor(ContextCompat.getColor(this, R.color.bg))
 
+        voice = Voice(this)
         bridge = Bridge(this, web)
         bridge.install()
         Shell.bridge = bridge
@@ -174,6 +177,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onDestroy() {
         if (Shell.bridge === bridge) Shell.bridge = null
+        voice.shutDown()
         web.destroy()
         super.onDestroy()
     }

@@ -108,6 +108,11 @@ class Bridge(private val activity: MainActivity, private val web: WebView) {
                 done(ok())
             }
             "notify" -> done(Notify.show(activity, o.optString("title"), o.optString("body")))
+            "biometric" -> Biometric.ask(activity, o.optString("reason"), done)
+            "listenStart" -> done(activity.voice.listenStart(o.optString("lang").ifBlank { null }))
+            "listenStop" -> done(activity.voice.listenStop())
+            "speak" -> activity.voice.speak(o.optString("text"), o.optString("lang").ifBlank { null }, done)
+            "speakStop" -> done(activity.voice.speakStop())
             "stop" -> {
                 ScreenService.instance?.stopFromWeb()
                 done(ok())
