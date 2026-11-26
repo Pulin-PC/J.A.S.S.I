@@ -3,9 +3,9 @@ import AppIntents
 /// "Ask J.A.S.S.I" for Siri and the Shortcuts app: takes the words, opens the app,
 /// and hands them to the page as the `ask` event (contract §2).
 struct AskJassiIntent: AppIntent {
-    static var title: LocalizedStringResource = "Ask J.A.S.S.I"
-    static var description = IntentDescription("Say or type what you want. J.A.S.S.I opens and gets to work.")
-    static var openAppWhenRun = true
+    static let title: LocalizedStringResource = "Ask J.A.S.S.I"
+    static let description = IntentDescription("Say or type what you want. J.A.S.S.I opens and gets to work.")
+    static let openAppWhenRun = true
 
     @Parameter(title: "What you want", requestValueDialog: "What should J.A.S.S.I do?")
     var text: String

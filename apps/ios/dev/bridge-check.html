@@ -55,20 +55,41 @@ document.getElementById("about").textContent = native
   ? "window.jassiNative: platform=" + native.platform + " version=" + native.version + " contract=" + native.contract
   : "window.jassiNative is MISSING (this page is not running inside the app, or not on the JASSI_URL origin)";
 
+var query = new URLSearchParams(location.search);
+
+// Inside a frame the bridge must not exist, and the app must refuse a direct message.
+if (window.top !== window) {
+  document.body.innerHTML = '<pre id="log"></pre>';
+  log = document.getElementById("log");
+  log.textContent = "INSIDE A FRAME: typeof window.jassiNative = " + typeof window.jassiNative + "\n";
+  var direct = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.jassi;
+  (direct ? direct.postMessage({ method: "listApps", args: null }) : Promise.reject(new Error("no handler")))
+    .then(function (r) { show("FRAME: direct message was ANSWERED (wrong)", r); },
+          function (e) { show("FRAME: direct message refused (right)", { ok: false, error: e.message }); });
+  throw new Error("in a frame: nothing more to do");
+}
+if (query.get("frame")) {
+  var frame = document.createElement("iframe");
+  frame.src = "/frame";
+  frame.style.cssText = "width:100%;height:110px;border:1px solid #3ce8ff;margin-top:10px";
+  document.body.appendChild(frame);
+}
+
+// [label, method, argument, short name for ?run=]
 var taps = [
-  ["Ask: mic", "openPermission", "mic"],
-  ["Ask: speech", "openPermission", "speech"],
-  ["Ask: alerts", "openPermission", "notifications"],
-  ["Permissions", "permissions"],
-  ["Face ID", "biometric", { reason: "Confirm it's you" }],
-  ["Speak", "speak", { text: "Hello, I am Jassi.", lang: "en-IN" }],
-  ["Stop speaking", "speakStop"],
-  ["Listen", "listenStart", { lang: "en-IN" }],
-  ["Stop listening", "listenStop"],
-  ["Alert", "notify", { title: "J.A.S.S.I", body: "This is a test alert." }],
-  ["Sign in", "openExternal", location.origin + "/auth/google/start?app=test"],
-  ["Open a site", "openExternal", "https://example.com/"],
-  ["List apps", "listApps"],
+  ["Ask: mic", "openPermission", "mic", "mic"],
+  ["Ask: speech", "openPermission", "speech", "speech"],
+  ["Ask: alerts", "openPermission", "notifications", "alerts"],
+  ["Permissions", "permissions", undefined, "permissions"],
+  ["Face ID", "biometric", { reason: "Confirm it's you" }, "faceid"],
+  ["Speak", "speak", { text: "Hello, I am Jassi.", lang: "en-IN" }, "speak"],
+  ["Stop speaking", "speakStop", undefined, "speakstop"],
+  ["Listen", "listenStart", { lang: "en-IN" }, "listen"],
+  ["Stop listening", "listenStop", undefined, "listenstop"],
+  ["Alert", "notify", { title: "J.A.S.S.I", body: "This is a test alert." }, "alert"],
+  ["Sign in", "openExternal", location.origin + "/auth/google/start?app=test", "signin"],
+  ["Open a site", "openExternal", "https://example.com/", "site"],
+  ["List apps", "listApps", undefined, "apps"],
 ];
 taps.forEach(function (t) {
   var b = document.createElement("button");
@@ -77,8 +98,29 @@ taps.forEach(function (t) {
   document.getElementById("buttons").appendChild(b);
 });
 
+// Not a bridge call: an ordinary link to another site. The app must hand it to Safari and stay on this page.
+var link = document.createElement("button");
+link.textContent = "Follow a link";
+link.onclick = function () { location.href = "https://example.com/"; };
+document.getElementById("buttons").appendChild(link);
+if (query.get("link")) setTimeout(link.onclick, 1500);
+
+// Not a bridge call: the page itself going to a jassi://auth link. The app must turn it into an `auth` event.
+var deep = document.createElement("button");
+deep.textContent = "Go to jassi://auth";
+deep.onclick = function () { location.href = "jassi://auth?code=test"; };
+document.getElementById("buttons").appendChild(deep);
+if (query.get("deeplink")) setTimeout(deep.onclick, 1500);
+
+// "?run=speak,alert" presses those buttons for you, in order, after the automatic calls below.
+var wanted = (query.get("run") || "").split(",").filter(Boolean).map(function (name) {
+  var t = taps.filter(function (t) { return t[3] === name; })[0];
+  return t ? [t[1], t[2]] : null;
+}).filter(Boolean);
+
+// "?only=1" skips the automatic calls.
 // The calls that need no tap run by themselves, one after another.
-[
+(query.get("only") ? [] : [
   ["permissions"],
   ["listApps"],
   ["openPermission", "screen"],
@@ -91,7 +133,7 @@ taps.forEach(function (t) {
   ["notify", { title: "J.A.S.S.I", body: "Sent before alerts were allowed." }],
   ["openExternal", "file:///etc/passwd"],
   ["speak", {}],
-].reduce(function (chain, c) { return chain.then(function () { return run(c[0], c[1]); }); }, Promise.resolve());
+]).concat(wanted).reduce(function (chain, c) { return chain.then(function () { return run(c[0], c[1]); }); }, Promise.resolve());
 </script>
 </body>
 </html>

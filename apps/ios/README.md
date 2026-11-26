@@ -66,10 +66,10 @@ The rules in `JassiCore` have unit tests. They run on the Mac in a few seconds, 
 swift test --package-path JassiCore --scratch-path ~/Library/Caches/jassi-ios-tests
 ```
 
-Or on a simulator, through the project:
+Or on an iPhone simulator. Run this one from inside `JassiCore/` (the tests belong to the package, not to the app's scheme):
 
 ```bash
-xcodebuild -project JASSI.xcodeproj -scheme JASSI -destination 'platform=iOS Simulator,name=iPhone 17' test
+xcodebuild test -scheme JassiCore -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath ~/Library/Developer/Xcode/DerivedData/JassiCore-tests
 ```
 
 ### Use a different server
