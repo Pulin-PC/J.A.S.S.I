@@ -45,7 +45,7 @@ public enum NavigationPolicy {
 
 /// Where `openExternal(url)` sends a link.
 public enum ExternalRoute: Equatable {
-    /// J.A.S.S.I's own sign-in start page: runs in the system sign-in sheet and comes back through `jassi://`.
+    /// A sign-in page: runs in the system sign-in sheet and comes back through `jassi://`.
     case authSession(URL)
     /// Anything else on the web: Safari.
     case browser(URL)
@@ -53,7 +53,15 @@ public enum ExternalRoute: Equatable {
 
     public static func route(_ url: URL, base: Origin) -> ExternalRoute {
         guard let origin = Origin(url: url) else { return .reject }
+        // J.A.S.S.I's own sign-in start pages ("Continue with Google", connect Gmail or Calendar).
         if origin == base, url.path.hasPrefix("/auth/") { return .authSession(url) }
+        // Another company's sign-in page that hands back to J.A.S.S.I (connecting Notion, Linear and so on):
+        // its `redirect_uri` is on our own address, and our server then sends the browser to `jassi://auth…`.
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        if let back = items.first(where: { $0.name == "redirect_uri" })?.value,
+           let backURL = URL(string: back), Origin(url: backURL) == base {
+            return .authSession(url)
+        }
         return .browser(url)
     }
 }

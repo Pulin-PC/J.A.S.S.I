@@ -8,10 +8,10 @@ Swift, SwiftUI + WKWebView, no third-party code. Needs iOS 17 or newer.
 
 | The web app calls | What happens on the iPhone |
 |---|---|
-| `openExternal(url)` | J.A.S.S.I's own sign-in page opens in the system sign-in sheet and comes back through `jassi://auth…`. Any other link opens in Safari. |
+| `openExternal(url)` | A sign-in page opens in the system sign-in sheet and comes back through `jassi://auth…`. That means J.A.S.S.I's own `/auth/…` pages, and another company's sign-in page that hands back to J.A.S.S.I (connecting Notion and the like). Any other link opens in Safari. |
 | `permissions()`, `openPermission(kind)` | Microphone, speech and alerts. Shows the system question the first time, opens Settings after that. The page is told when an answer changes. |
 | `biometric({ reason })` | Face ID or Touch ID. |
-| `listenStart` / `listenStop` | Speech-to-text, sending words as they are heard. Default language `en-IN`. |
+| `listenStart` / `listenStop` | Speech-to-text, sending words as they are heard. Default language `en-IN`. The first time, it asks for the microphone and speech itself. |
 | `speak` / `speakStop` | Reads text aloud. |
 | `notify({ title, body })` | A system alert. |
 | `listApps()` | Looks for 50 well-known apps and returns the ones found, with `partial: true`. |

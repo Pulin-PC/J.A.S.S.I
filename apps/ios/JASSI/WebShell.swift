@@ -96,6 +96,10 @@ final class WebShell: NSObject, ObservableObject {
         case .biometric(let reason):
             return await Biometric.confirm(reason: reason)
         case .listenStart(let lang):
+            // First use: show the system questions here, like a browser does, instead of failing.
+            if Permissions.mic == .ask { await Permissions.open(.mic) }
+            if Permissions.mic == .granted, Permissions.speech == .ask { await Permissions.open(.speech) }
+            await checkPermissions()
             return listener.start(lang: lang)
         case .listenStop:
             return listener.stop()

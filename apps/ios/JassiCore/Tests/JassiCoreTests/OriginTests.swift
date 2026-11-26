@@ -113,6 +113,16 @@ struct LinkTests {
         let elsewhere = URL(string: "https://evil.com/auth/google/start")!
         #expect(ExternalRoute.route(elsewhere, base: live) == .browser(elsewhere))
 
+        // Connecting another company's app: their sign-in page, handing back to J.A.S.S.I's own address.
+        let connect = URL(string: "https://mcp.notion.com/authorize?response_type=code&client_id=abc&redirect_uri=https%3A%2F%2F\(host)%2Fauth%2Fmcp%2Fcallback&state=xyz")!
+        #expect(ExternalRoute.route(connect, base: live) == .authSession(connect))
+
+        // The same kind of page handing back to someone else is just a web page.
+        let foreign = URL(string: "https://mcp.notion.com/authorize?redirect_uri=https%3A%2F%2Fevil.com%2Fcallback")!
+        #expect(ExternalRoute.route(foreign, base: live) == .browser(foreign))
+        let lookalike = URL(string: "https://mcp.notion.com/authorize?redirect_uri=https%3A%2F%2F\(host).evil.com%2Fcb")!
+        #expect(ExternalRoute.route(lookalike, base: live) == .browser(lookalike))
+
         #expect(ExternalRoute.route(URL(string: "file:///etc/passwd")!, base: live) == .reject)
         #expect(ExternalRoute.route(URL(string: "jassi://auth?code=1")!, base: live) == .reject)
     }
