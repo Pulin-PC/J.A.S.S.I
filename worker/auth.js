@@ -46,7 +46,8 @@ export async function pkce() {
 export const SCOPES = {
   signin: ["openid", "email", "profile"],
   calendar: ["https://www.googleapis.com/auth/calendar.events"],
-  gmail: ["https://www.googleapis.com/auth/gmail.readonly"],
+  // readonly = read your inbox; compose = write drafts and send (only ever after your yes). Older connections have readonly only.
+  gmail: ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.compose"],
 };
 
 export function googleAuthUrl({ clientId, redirectUri, state, challenge, connect }) {

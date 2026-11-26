@@ -20,6 +20,7 @@ const base = {
   diaryToday() { return []; },
   runScript: null,   // free-form Code Mode (Node only)
   google: null,      // real Google Calendar / Gmail (Cloudflare, when connected)
+  deviceHub: null,   // makeDeviceHub(): the line to the native apps for screen control (server/device.js)
   me: { name: "You", role: "owner" },
   host: "node",
 };

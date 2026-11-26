@@ -57,12 +57,25 @@
 <main class="grid">
   <!-- LEFT -->
   <section class="col left">
-    <div class="panel" id="panel-apps">
-      <h2><span>01</span>Your apps</h2>
-      <ul id="apps" class="apps"></ul>
+    <div class="panel grow tabbed" id="panel-tabs">
+      <div class="ltabs" role="tablist" aria-label="Your apps, schedule and diary">
+        <button type="button" role="tab" class="ltab" id="tab-btn-apps" data-tab="apps" aria-controls="tab-apps" aria-selected="true">Your apps</button>
+        <button type="button" role="tab" class="ltab" id="tab-btn-schedule" data-tab="schedule" aria-controls="tab-schedule" aria-selected="false" tabindex="-1">Schedule <i class="tab-count" id="count-schedule"></i></button>
+        <button type="button" role="tab" class="ltab" id="tab-btn-diary" data-tab="diary" aria-controls="tab-diary" aria-selected="false" tabindex="-1">Diary <i class="tab-count" id="count-diary"></i></button>
+      </div>
+      <div class="tab-body" id="tab-apps" role="tabpanel" aria-labelledby="tab-btn-apps">
+        <ul id="apps" class="apps"></ul>
+      </div>
+      <div class="tab-body" id="tab-schedule" role="tabpanel" aria-labelledby="tab-btn-schedule" hidden>
+        <ul id="upcoming" class="upcoming"><li class="empty">Nothing yet</li></ul>
+      </div>
+      <div class="tab-body" id="tab-diary" role="tabpanel" aria-labelledby="tab-btn-diary" hidden>
+        <div class="tab-note" id="diary-path"></div>
+        <ol id="diary" class="diary"></ol>
+      </div>
     </div>
     <div class="panel" id="panel-money">
-      <h2><span>02</span>Money</h2>
+      <h2><span>01</span>Money</h2>
       <div class="money">
         <svg viewBox="0 0 120 120" class="gauge">
           <circle cx="60" cy="60" r="50" class="g-bg"/>
@@ -80,10 +93,6 @@
         <div><i class="dot r"></i>Bank &amp; UPI apps · <b>locked</b></div>
       </div>
       <button class="ghost wide" id="btn-attack" title="Pretend the AI read a scam email and tries to pay">Test the guard: scam email tries to pay</button>
-    </div>
-    <div class="panel" id="panel-next">
-      <h2><span>03</span>Coming up</h2>
-      <ul id="upcoming" class="upcoming"><li class="empty">Nothing yet</li></ul>
     </div>
   </section>
 
@@ -139,18 +148,8 @@
   <!-- RIGHT -->
   <section class="col right">
     <div class="panel grow" id="panel-feed">
-      <h2><span>04</span>What I'm doing</h2>
+      <h2><span>02</span>What I'm doing</h2>
       <ol id="feed" class="feed"></ol>
-    </div>
-    <div class="panel" id="panel-code">
-      <h2><span>05</span>Code Mode <em id="code-meta"></em></h2>
-      <pre id="code" class="code"><span class="c-dim">// When you ask for several things at once, I write one
-// small script and run every step in it, in a sandbox.
-// Each step still goes through the safety guard.</span></pre>
-    </div>
-    <div class="panel" id="panel-diary">
-      <h2><span>06</span>Diary <em id="diary-path"></em></h2>
-      <ol id="diary" class="diary"></ol>
     </div>
   </section>
 </main>

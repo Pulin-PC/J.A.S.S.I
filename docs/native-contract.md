@@ -4,7 +4,7 @@ One web app, three shells: **desktop** (macOS + Windows), **Android**, **iPhone*
 Each native app is a thin shell around the *same* web app (`public/`, served by the live site). The shell adds only what a browser can't do: screen control, the list of installed apps, sign-in through the system browser, real fingerprint, voice, alerts.
 
 - Shells live in `apps/desktop/`, `apps/android/`, `apps/ios/`. A shell never edits `server/`, `worker/`, `public/` or `brain/`.
-- The server and web side of this contract (routes, tools, guard, onboarding screens) is built on `main`. Until it lands, test a shell against a throwaway stub of §4.
+- The server side of this contract is live on `main` and on the live site: the sign-in hand-off (§3), `POST /api/device/pair` (signed in) → `{ deviceId, token }`, the device channel (§4), and `POST /api/device/apps` (the app scan). Test a shell against it, or against the address `npm start` prints.
 - Need a change to this contract? Don't work around it: say what you need and why.
 
 ## 1. Shell rules

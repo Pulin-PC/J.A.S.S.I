@@ -10,7 +10,7 @@
 
 export const STABLE_MS = 140;
 
-const VERBS = "email|open|launch|start|close|search|google|look up|find|play|pause|resume|skip|message|text|whatsapp|send|tell|" +
+const VERBS = "email|draft|open|launch|start|close|search|google|look up|find|play|pause|resume|skip|message|text|whatsapp|send|tell|" +
   "set|remind|note|order|get me|pay|transfer|navigate|take me|directions|add|put|schedule|create|make|book|read|check|" +
   "show|give|stop|call|save|write|brief|what|how";
 const SPLIT = new RegExp(
@@ -150,6 +150,9 @@ export class Parser {
     if ((m = c.match(/^(?:send\s+(?:a\s+)?(?:whatsapp\s+)?(?:message|text|msg)\s+to|whatsapp|message|text|msg|tell|send)\s+(.+)$/i))
       && !/^(send|tell)\s+(an?\s+)?(e-?mail|mail)\b/i.test(lc) && !/^send\s+(payment\s+)?reminders?\b/i.test(lc))
       return this._message(m[1], c);
+    // "draft ..." never sends: it leaves the email in Drafts for you to read over
+    if ((m = c.match(/^(?:draft|prepare|write (?:up )?a draft of)\s+(?:an?\s+)?(?:e-?mail|mail|reply|note)\s+(?:to|for)\s+(\S+(?:\s\S+)?)\s+(?:saying|that|about|:)\s+(.+)$/i)))
+      return S("draft_email", { to: stripText(m[1]), text: stripText(m[2]) }, { free: true });
     if ((m = c.match(/^(?:(?:send|write)\s+(?:an?\s+)?(?:e-?mail|mail)\s+to|e-?mail)\s+(\S+(?:\s\S+)?)\s+(?:saying|that|about|:)\s+(.+)$/i)))
       return S("email", { to: stripText(m[1]), text: stripText(m[2]) }, { free: true });
     if (/^send\s+(the\s+)?(payment\s+)?reminders?/.test(lc)) return S("chase_unpaid", {}, { free: true });

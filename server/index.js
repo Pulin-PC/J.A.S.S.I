@@ -29,6 +29,7 @@ const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", "
 rt.brainToken = process.env.BRAIN_TOKEN || crypto.randomBytes(24).toString("hex");
 const brainBus = makeBus();
 rt.brainLink = { count: () => brainBus.size, send: q => brainBus.emit("ask", q) };
+rt.origin = `http://localhost:${PORT}`;   // where connected apps send the browser back after sign-in
 
 // Only this dashboard and local apps may use the API: a web page you visit must not drive J.A.S.S.I on your computer.
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
@@ -59,8 +60,8 @@ const server = http.createServer(async (req, res) => {
       await stream(req, res, brainBus, { at: Date.now() });
       return rt.bus.emit("brain", { on: brainBus.size > 0 });
     }
-    if (url.pathname.startsWith("/api/") || url.pathname === "/mcp") {
-      const r = await api(req.method, url.pathname, req.method === "POST" ? await readBody(req) : "", req.headers);
+    if (url.pathname.startsWith("/api/") || url.pathname === "/mcp" || url.pathname === "/auth/mcp/callback") {
+      const r = await api(req.method, url.pathname, req.method === "POST" ? await readBody(req) : "", req.headers, url.searchParams);
       if (r) { res.writeHead(r.status, { "content-type": r.type, ...(r.headers || {}) }); return res.end(r.body); }
       res.writeHead(404, { "content-type": "application/json" }); return res.end('{"error":"not found"}');
     }

@@ -7,7 +7,9 @@ import { DurableObject } from "cloudflare:workers";
 import demo from "../data/demo.json";
 import { withRt, makeBus, makeApprovals, freshState, today, hhmm, diaryHeader, diaryEntry, parseDiary } from "../server/runtime.js";
 import { api } from "../server/api.js";
-import { cookies, setCookie, sign, unsign, randomId, pkce, googleAuthUrl, googleToken, readIdToken, SCOPES } from "./auth.js";
+import { makeDeviceHub, hashToken } from "../server/device.js";
+import { rawEmail } from "../server/mime.js";
+import { cookies, setCookie, sign, unsign, randomId, pkce, b64url, googleAuthUrl, googleToken, readIdToken, SCOPES } from "./auth.js";
 
 const enc = new TextEncoder();
 const SESSION = "jassi_s", OAUTH = "jassi_o", INVITE = "jassi_inv";
@@ -46,7 +48,12 @@ export class JassiHub extends DurableObject {
     const spentToday = () => { if (state.spent.date !== today()) state.spent = { date: today(), amount: 0 }; return state.spent.amount; };
     const dir = () => env.DIR.get(env.DIR.idFromName("directory"));
     this.r = {
-      demo, state, bus, approvals: makeApprovals(bus), host: "cloudflare",
+      demo, state, bus, approvals: makeApprovals(bus), host: "cloudflare", deviceHub: makeDeviceHub(),
+      // device tokens: the directory only learns "this hash belongs to this person", so the Worker can route the device here
+      registerDevice: hash => dir().fetch("https://dir/devkey/put", { method: "POST", body: JSON.stringify({ hash, sub: this.me?.sub }) }),
+      unregisterDevice: hash => dir().fetch("https://dir/devkey/delete", { method: "POST", body: JSON.stringify({ hash }) }),
+      // a connected app's sign-in comes back to the Worker with only this random state; the directory maps it to the person
+      registerMcpState: state => dir().fetch("https://dir/mcpstate/put", { method: "POST", body: JSON.stringify({ state, sub: this.me?.sub }) }),
       save, spentToday, addSpent: n => { spentToday(); state.spent.amount += n; save(); },
       diary: entry => {
         const day = today();
@@ -88,8 +95,12 @@ export class JassiHub extends DurableObject {
       return data;
     }
     const unescape = s => String(s || "").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+    const gmail = (path, mail) => call("https://gmail.googleapis.com/gmail/v1/users/me/" + path, { method: "POST", body: JSON.stringify(path === "drafts" ? { message: { raw: rawEmail(mail) } } : { raw: rawEmail(mail) }) });
     return {
       has,
+      canWrite: () => has("gmail") && (hub.google.scopes || []).includes(SCOPES.gmail[1]),
+      draftEmail: mail => gmail("drafts", mail),            // sits in your Drafts until you send it
+      sendEmail: mail => gmail("messages/send", mail),      // only ever called after your yes (guard kind "send")
       get email() { return hub.google?.email || ""; },
       async addEvent(title, when) {
         const iso = t => new Date(t).toISOString();
@@ -122,6 +133,7 @@ export class JassiHub extends DurableObject {
       if (!this.me || this.me.sub !== me.sub || this.me.role !== me.role || this.me.name !== me.name) { this.me = me; this.ctx.storage.put("me", me); }
     }
     if (this.me) this.r.me = { name: this.me.name, email: this.me.email, picture: this.me.picture, role: this.me.role };
+    this.r.origin = request.headers.get("x-jassi-origin") || this.r.origin || url.origin;
     return withRt(this.r, () => this.handle(request, url));
   }
 
@@ -149,9 +161,11 @@ export class JassiHub extends DurableObject {
     }
     if (url.pathname === "/api/events") return sse(this.r.bus);
     const headers = Object.fromEntries(request.headers);
-    const r = await api(request.method, url.pathname, request.method === "POST" ? await request.text() : "", headers);
+    const r = await api(request.method, url.pathname, request.method === "POST" ? await request.text() : "", headers, url.searchParams);
     if (!r) return json({ error: "not found" }, 404);
-    return new Response(r.body, { status: r.status, headers: { "content-type": r.type, ...(r.headers || {}) } });
+    const out = { "content-type": r.type, ...(r.headers || {}) };
+    if (r.app) { out["x-jassi-app"] = r.app; out["x-jassi-data"] = JSON.stringify(r.data || {}); }   // read and removed by the Worker
+    return new Response(r.body, { status: r.status, headers: out });
   }
 }
 
@@ -221,6 +235,28 @@ export class JassiDirectory extends DurableObject {
         }
         return json({ key });
       }
+      // ---- one-time codes that hand a sign-in from the system browser back to a native app (60 s, single use)
+      case "/authcode/put": {
+        await S.put("authcode:" + body.code, { challenge: body.challenge, data: body.data, exp: Date.now() + 60000 });
+        return json({ ok: true });
+      }
+      case "/authcode/take": {
+        const k = "authcode:" + String(body.code || "");
+        const a = await S.get(k);
+        if (a) await S.delete(k);
+        return json(a && a.exp > Date.now() ? { ok: true, challenge: a.challenge, data: a.data } : { ok: false });
+      }
+      // ---- a connected app's sign-in in progress: random state -> person (10 minutes, single use)
+      case "/mcpstate/put": { if (body.state && body.sub) await S.put("mcpstate:" + body.state, { sub: body.sub, exp: Date.now() + 10 * 60e3 }); return json({ ok: true }); }
+      case "/mcpstate/take": {
+        const k = "mcpstate:" + String(body.state || ""), m = await S.get(k);
+        if (m) await S.delete(k);
+        return json({ sub: m && m.exp > Date.now() ? m.sub : null });
+      }
+      // ---- native app device tokens (only the SHA-256 is ever stored)
+      case "/devkey/put": { if (body.hash && body.sub) await S.put("devkey:" + body.hash, body.sub); return json({ ok: true }); }
+      case "/devkey/delete": { await S.delete("devkey:" + body.hash); return json({ ok: true }); }
+      case "/devkey/lookup": return json({ sub: (await S.get("devkey:" + url.searchParams.get("h"))) || null });
       case "/mcpkey/lookup": return json({ sub: (await S.get("mcpkey:" + url.searchParams.get("key"))) || null });
       // ---- the Claude Code brain (one bridge on the owner's Mac serves everyone, one Claude process per person)
       case "/brain/status": return json({ on: this.brainOn });
@@ -296,38 +332,73 @@ async function route(req, env) {
     const redirectUri = url.origin + "/auth/google/callback";
     const back = (to, setCookies = []) => { const h = new Headers({ location: to }); for (const s of setCookies) h.append("set-cookie", s); return new Response(null, { status: 302, headers: h }); };
 
+    const appChallenge = v => (/^[\w-]{43}$/.test(v || "") ? v : "");
+    const appLink = async (challenge, data) => {   // jassi://auth?code=<one-time code>: the only thing that ever travels in the link
+      const code = randomId(24);
+      await dirOf(env).fetch("https://dir/authcode/put", { method: "POST", body: JSON.stringify({ code, challenge, data }) });
+      return "jassi://auth?code=" + code;
+    };
+
     // ---------------------------------------------------------- sign-in with Google
     if (p === "/auth/google/start") {
       if (!env.GOOGLE_CLIENT_ID) return back("/?error=" + encodeURIComponent("Google sign-in isn't set up yet."));
       const connect = ["calendar", "gmail"].includes(url.searchParams.get("connect")) ? url.searchParams.get("connect") : "";
-      if (connect && !session) return back("/");
+      // Native apps sign in through the system browser (Google refuses WebViews). "app" is the SHA-256 of a secret only the
+      // app's own page knows, so a one-time code that leaks through the jassi:// link is useless to anyone else.
+      const app = appChallenge(url.searchParams.get("app"));
+      const ticket = app ? await unsign(url.searchParams.get("ticket"), secret) : null;   // who is connecting, when the browser has no session
+      const sub = ticket?.t === "connect" ? ticket.sub : connect ? session?.sub : "";
+      if (connect && !sub) return back("/");
       const { verifier, challenge } = await pkce();
       const state = randomId(16);
-      const o = await sign({ state, verifier, connect, exp: Date.now() + 10 * 60e3 }, secret);
+      const o = await sign({ state, verifier, connect, app, sub: connect ? sub : "", exp: Date.now() + 10 * 60e3 }, secret);
       return back(googleAuthUrl({ clientId: env.GOOGLE_CLIENT_ID, redirectUri, state, challenge, connect }), [setCookie(OAUTH, o, { maxAge: 600, secure })]);
     }
     if (p === "/auth/google/callback") {
       const o = await unsign(c[OAUTH], secret);
       const clear = setCookie(OAUTH, "", { maxAge: 0, secure });
-      if (url.searchParams.get("error")) return back("/?error=" + encodeURIComponent("Google sign-in was cancelled."), [clear]);
+      // Back to the native app with a one-time code, or (in a browser) straight to the page.
+      const done = async (data, to, extra = []) => o?.app ? back(await appLink(o.app, data), [clear]) : back(to, [clear, ...extra]);
+      const fail = msg => done({ error: msg }, "/?error=" + encodeURIComponent(msg));
+      if (url.searchParams.get("error")) return fail("Google sign-in was cancelled.");
       if (!o || o.state !== url.searchParams.get("state")) return back("/?error=" + encodeURIComponent("Sign-in expired. Please try again."), [clear]);
       try {
         const t = await googleToken({ code: url.searchParams.get("code"), client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, redirect_uri: redirectUri, grant_type: "authorization_code", code_verifier: o.verifier });
         const id = readIdToken(t.id_token, env.GOOGLE_CLIENT_ID);
         if (o.connect) {
-          if (!session) return back("/", [clear]);
-          if (!t.refresh_token) return back("/?error=" + encodeURIComponent("Google didn't give access. Please try again."), [clear]);
-          await hubFor(env, session.sub).fetch("https://hub/internal/google", { method: "POST", body: JSON.stringify({
+          if (!o.sub) return back("/", [clear]);
+          if (!t.refresh_token) return fail("Google didn't give access. Please try again.");
+          await hubFor(env, o.sub).fetch("https://hub/internal/google", { method: "POST", body: JSON.stringify({
             access_token: t.access_token, refresh_token: t.refresh_token, expires_at: Date.now() + (t.expires_in || 3600) * 1000, scopes: String(t.scope || "").split(" "), email: id.email }) });
-          return back("/?connected=" + o.connect, [clear]);
+          return done({ connected: o.connect }, "/?connected=" + o.connect);
         }
         const r = await (await dirOf(env).fetch("https://dir/signin", { method: "POST", body: JSON.stringify({ sub: id.sub, email: id.email, email_verified: id.email_verified, name: id.name || id.email, picture: id.picture || "", invite: c[INVITE] || "" }) })).json();
-        if (!r.ok) return back("/?error=" + encodeURIComponent(r.reason), [clear]);
-        const s = await sign({ sub: r.user.sub, email: r.user.email, name: r.user.name, picture: r.user.picture, role: r.user.role, exp: Date.now() + 30 * DAY }, secret);
-        return back("/", [clear, setCookie(SESSION, s, { maxAge: 30 * 86400, secure }), setCookie(INVITE, "", { maxAge: 0, secure })]);
+        if (!r.ok) return fail(r.reason);
+        const who = { sub: r.user.sub, email: r.user.email, name: r.user.name, picture: r.user.picture, role: r.user.role };
+        const s = await sign({ ...who, exp: Date.now() + 30 * DAY }, secret);
+        return done({ session: who }, "/", [setCookie(SESSION, s, { maxAge: 30 * 86400, secure }), setCookie(INVITE, "", { maxAge: 0, secure })]);
       } catch (e) {
-        return back("/?error=" + encodeURIComponent("Google sign-in failed: " + e.message), [clear]);
+        return fail("Google sign-in failed: " + e.message);
       }
+    }
+    // The native app's own page swaps the one-time code (plus its secret) for the session cookie.
+    if (p === "/auth/app") {
+      const r = await (await dirOf(env).fetch("https://dir/authcode/take", { method: "POST", body: JSON.stringify({ code: url.searchParams.get("code") || "" }) })).json();
+      const proof = b64url(await crypto.subtle.digest("SHA-256", enc.encode(url.searchParams.get("v") || "")));
+      if (!r.ok || r.challenge !== proof) return back("/?error=" + encodeURIComponent("Sign-in expired. Please try again."));
+      if (r.data.error) return back("/?error=" + encodeURIComponent(r.data.error));
+      if (r.data.connected) return back("/?connected=" + encodeURIComponent(r.data.connected));
+      const s = await sign({ ...r.data.session, exp: Date.now() + 30 * DAY }, secret);
+      return back("/", [setCookie(SESSION, s, { maxAge: 30 * 86400, secure })]);
+    }
+    // A connected app (Notion, Zomato…) sends the browser back here after the person signs in there.
+    if (p === "/auth/mcp/callback") {
+      const { sub } = await (await dirOf(env).fetch("https://dir/mcpstate/take", { method: "POST", body: JSON.stringify({ state: url.searchParams.get("state") || "" }) })).json();
+      if (!sub) return back("/?error=" + encodeURIComponent("That sign-in took too long. Please try again."));
+      const res = await hubFor(env, sub).fetch(new Request(req.url, { headers: { "x-jassi-origin": url.origin } }));
+      const app = appChallenge(res.headers.get("x-jassi-app"));
+      if (app) return back(await appLink(app, JSON.parse(res.headers.get("x-jassi-data") || "{}")));
+      return back(res.headers.get("location") || "/");
     }
     if (p === "/auth/logout") return back("/", [setCookie(SESSION, "", { maxAge: 0, secure })]);
     // Local testing only (wrangler dev with DEV_LOGIN=1): sign in without Google.
@@ -335,7 +406,9 @@ async function route(req, env) {
       const email = url.searchParams.get("email") || "owner@example.com";
       const r = await (await dirOf(env).fetch("https://dir/signin", { method: "POST", body: JSON.stringify({ sub: "dev_" + email, email, email_verified: true, name: url.searchParams.get("name") || email.split("@")[0], picture: "", invite: c[INVITE] || "" }) })).json();
       if (!r.ok) return back("/?error=" + encodeURIComponent(r.reason));
-      const s = await sign({ sub: r.user.sub, email, name: r.user.name, picture: "", role: r.user.role, exp: Date.now() + DAY }, secret);
+      const who = { sub: r.user.sub, email, name: r.user.name, picture: "", role: r.user.role };
+      if (appChallenge(url.searchParams.get("app"))) return back(await appLink(url.searchParams.get("app"), { session: who }));
+      const s = await sign({ ...who, exp: Date.now() + DAY }, secret);
       return back("/", [setCookie(SESSION, s, { maxAge: 86400, secure })]);
     }
     const join = p.match(/^\/join\/([\w-]+)$/);
@@ -362,6 +435,14 @@ async function route(req, env) {
       return forward(new Request(req.url, { method: req.method, headers: h, body: req.method === "POST" ? await req.arrayBuffer() : undefined }), hubFor(env, sub));
     }
 
+    // ---------------------------------------------------------- a paired native app asking for / reporting screen work (its token is the key)
+    if (p === "/api/device/next" || p === "/api/device/result") {
+      const tok = bearerOf(req);
+      const sub = tok.startsWith("jd_") ? (await (await dirOf(env).fetch("https://dir/devkey/lookup?h=" + await hashToken(tok))).json()).sub : null;
+      if (!sub) return json({ ok: false }, 401);
+      return forward(req, hubFor(env, sub));   // the person's own space checks the token again
+    }
+
     // ---------------------------------------------------------- everything else under /api needs you to be signed in
     if (p.startsWith("/api/")) {
       if (!session) {
@@ -370,6 +451,8 @@ async function route(req, env) {
         if (code) invite = await (await dirOf(env).fetch("https://dir/invite?code=" + encodeURIComponent(code))).json();
         return json({ signin: true, google: !!env.GOOGLE_CLIENT_ID, invite, dev: env.DEV_LOGIN === "1" && url.hostname === "localhost" }, 401);
       }
+      // A 5-minute ticket that says who is connecting an app, for flows that continue in the system browser.
+      if (p === "/api/auth/ticket") return json({ ticket: await sign({ t: "connect", sub: session.sub, exp: Date.now() + 5 * 60e3 }, secret) });
       if (p === "/api/invites" || p === "/api/invites/toggle") {
         if (session.role !== "owner") return json({ error: "owner only" }, 403);
         return dirOf(env).fetch(new Request("https://dir" + p.replace("/api", ""), { method: req.method, body: req.method === "POST" ? await req.text() : undefined }));
@@ -379,7 +462,7 @@ async function route(req, env) {
         const r = await (await dirOf(env).fetch("https://dir/mcpkey", { method: "POST", body: JSON.stringify({ sub: session.sub, regen: !!b.regen }) })).json();
         return json({ url: url.origin + "/mcp", key: r.key });
       }
-      return forward(req, hubFor(env, session.sub), { "x-jassi-me": JSON.stringify({ sub: session.sub, email: session.email, name: session.name, picture: session.picture, role: session.role }) });
+      return forward(req, hubFor(env, session.sub), { "x-jassi-origin": url.origin, "x-jassi-me": JSON.stringify({ sub: session.sub, email: session.email, name: session.name, picture: session.picture, role: session.role }) });
     }
     return env.ASSETS.fetch(req);
   }

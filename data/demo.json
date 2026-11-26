@@ -13,7 +13,7 @@
     { "id": "swiggy", "name": "Swiggy", "how": "Official MCP", "tier": "connect", "tools": ["order_food"] },
     { "id": "zomato", "name": "Zomato", "how": "Official MCP", "tier": "connect", "tools": ["order_food"] },
     { "id": "calendar", "name": "Calendar", "how": "Google API", "tier": "connect", "tools": ["add_event", "list_events"] },
-    { "id": "gmail", "name": "Gmail", "how": "Google API", "tier": "connect", "tools": ["read_email", "send_email"] },
+    { "id": "gmail", "name": "Gmail", "how": "Google API", "tier": "connect", "tools": ["read_email", "draft_email", "send_email"] },
     { "id": "whatsapp", "name": "WhatsApp", "how": "App link · you tap Send", "tier": "link", "tools": ["draft_message"] },
     { "id": "maps", "name": "Maps", "how": "App link", "tier": "link", "tools": ["directions"] },
     { "id": "youtube", "name": "YouTube", "how": "App link", "tier": "link", "tools": ["play", "web_search"] },

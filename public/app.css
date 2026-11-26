@@ -227,18 +227,24 @@ body.listening .mic { animation: blink 1s infinite; }
   text-transform: uppercase; color: var(--bg); background: var(--c1); padding: 6px 10px; text-decoration: none; box-shadow: 0 0 12px var(--c2); }
 .act .open + .open { margin-left: 6px; }
 
-/* code mode */
-.code { margin: 0; font: 12px/1.6 var(--mono); color: #b9eefb; white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow-y: auto; }
-.code .ln { display: block; padding-left: 8px; border-left: 2px solid transparent; transition: .3s; }
-.code .ln.hot { border-left-color: var(--c1); background: rgba(70,236,255,.08); }
-.code .ln.done { border-left-color: var(--green); }
-.code .ln.bad { border-left-color: var(--red); }
-.c-k { color: #ff9de2; } .c-s { color: #ffd479; } .c-f { color: var(--c1); } .c-dim { color: #4f7b8a; }
-.code-sum { display: block; margin-top: 8px; color: var(--green); font-family: var(--ui); font-size: 13px; font-weight: 600; }
-#panel-code.live { box-shadow: 0 0 30px var(--c3); }
+/* left tabs: your apps, schedule, diary */
+.tabbed { padding-top: 10px; }
+.ltabs { display: flex; gap: 4px; margin: 0 0 12px; border-bottom: 1px solid var(--line); }
+.ltab { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 6px; background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  padding: 8px 2px 9px; font: 700 10.5px var(--display); letter-spacing: .1em; min-width: 0; text-transform: uppercase; color: var(--dim); cursor: pointer; transition: .2s; white-space: nowrap; }
+.ltab:hover { color: var(--text); }
+.ltab.on { color: var(--c1); border-bottom-color: var(--c1); text-shadow: 0 0 10px var(--c2); }
+.ltab:focus-visible { outline: 1px solid var(--c1); outline-offset: -1px; }
+.tab-count { font: 600 10px var(--mono); font-style: normal; color: var(--c1); letter-spacing: 0; }
+.tab-count:empty { display: none; }
+.tab-body { flex: 1 1 0; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.tab-body[hidden] { display: none; }
+.tab-note { font-size: 11.5px; color: var(--dim); margin: 0 0 8px; }
+.tab-note:empty { display: none; }
+#panel-tabs { min-height: 320px; }
 
 /* diary */
-.diary { max-height: 210px; }
+.diary { overflow: visible; }
 .diary li { display: grid; grid-template-columns: 62px 1fr; gap: 8px; font-size: 13px; padding: 4px 0; border-bottom: 1px dashed rgba(70,236,255,.1); }
 .diary .t { font: 11px var(--mono); color: var(--c1); padding-top: 2px; }
 .diary .d { color: var(--dim); font-size: 11.5px; }
@@ -317,6 +323,7 @@ body.listening .mic { animation: blink 1s infinite; }
   .grid { grid-template-columns: 1fr; height: auto; padding: 6px 16px 16px; }
   .col.center { order: -1; }
   .col.left, .col.right { overflow: visible; }
+  #panel-tabs .tab-body { flex: none; max-height: 60vh; }
   .reactor-wrap { width: min(72vw, 320px); }
   .stats { grid-template-columns: repeat(2, 1fr); margin-top: 6px; }
   .sim span { display: none; }
@@ -439,3 +446,9 @@ body.listening .mic { animation: blink 1s infinite; }
   .ob-card { padding: 20px 16px 18px; }
   #btn-brief { display: none; }
 }
+
+/* apps found on this device (native apps) */
+.tiles-h { margin: 18px 0 8px; font: 700 12px var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--c1); }
+.tiles-h small { color: var(--dim); font: 500 13px var(--ui); letter-spacing: 0; text-transform: none; margin-left: 8px; }
+.pill-s { font-size: 12px; color: var(--dim); white-space: nowrap; }
+.mini[disabled] { cursor: default; box-shadow: none; }
