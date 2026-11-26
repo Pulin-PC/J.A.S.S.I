@@ -1,5 +1,5 @@
 // Sign-in screen, first-time setup (onboarding) and Settings. Plain words everywhere.
-import { native, nativeAuth, onNative } from "./native.js";
+import { native, nativeAuth, authChallenge, onNative } from "./native.js";
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const inr = n => "₹" + Math.round(n).toLocaleString("en-IN");
@@ -72,6 +72,34 @@ export function appTiles(el) {
   };
 }
 
+// ---- official connections: the company's own MCP server, with your own login (the way Claude's connectors work)
+async function connectMcp(body, btn) {
+  if (btn) btn.textContent = "Connecting…";
+  LS.set("jassi.return", $("#onboard").hidden ? "settings" : "onboard");
+  const r = await post("/api/mcp/connect", { ...body, app: native ? await authChallenge() : "" });
+  if (r.authUrl) return void (native ? native.openExternal(r.authUrl) : (location.href = r.authUrl));   // sign in there, then come back
+  LS.set("jassi.return", "");
+  await ctx.refresh();
+  ctx.toast(r.ok ? "Connected" : "Not connected", r.ok ? `${r.connected} is connected.` : r.say || "Please try again.");
+}
+export function moreApps(el) {
+  const C = ctx.getS().connections || { official: [], servers: [] };
+  const mine = Object.fromEntries(C.servers.map(s => [s.id, s]));
+  const row = (id, name, s, official) => `<div class="tile ${s && !s.needsLogin ? "is-on" : ""}"><span class="t-ic">${esc(name[0])}</span><span class="t-txt"><b>${esc(name)}</b><small>${
+    s ? (s.needsLogin ? "Please sign in again" : `✓ Connected · it can do ${s.tools.length} things`) : "Official connection · sign in with your own account"}</small></span>${
+    s && !(s.needsLogin && official) ? `<button class="mini" data-mdis="${esc(id)}">Disconnect</button>` : `<button class="mini on" data-mcon="${esc(id)}">${s ? "Sign in" : "Connect"}</button>`}</div>`;
+  el.innerHTML = `<h4 class="tiles-h">More apps <small>the company's own connection, with your own login</small></h4>
+    <div class="tiles">${C.official.map(o => row(o.id, o.name, mine[o.id], true)).join("")}${C.servers.filter(s => !C.official.some(o => o.id === s.id)).map(s => row(s.id, s.name, s, false)).join("")}</div>
+    <div class="inv-new"><input id="mcp-url" placeholder="Have a connection link (MCP)? Paste it here" inputmode="url" maxlength="300"><button class="mini on" id="mcp-add">Connect</button></div>
+    <p class="ob-foot">Reading runs on its own. Anything that writes or sends asks you first. Anything that can spend needs your fingerprint.</p>`;
+  el.onclick = async e => {
+    const t = e.target;
+    if (t.dataset.mcon) { await connectMcp({ id: t.dataset.mcon }, t); moreApps(el); }
+    if (t.dataset.mdis) { await post("/api/mcp/disconnect", { id: t.dataset.mdis }); await ctx.refresh(); moreApps(el); }
+    if (t.id === "mcp-add" && $("#mcp-url").value.trim()) { await connectMcp({ url: $("#mcp-url").value.trim() }, t); moreApps(el); }
+  };
+}
+
 // ---- apps found on this device (native apps only). The server sorts them; locked ones can never be turned on.
 const PLATFORM_NAME = { android: "phone", ios: "iPhone", macos: "Mac", windows: "PC" };
 export async function scanDevice() {
@@ -94,10 +122,11 @@ export function deviceApps(el) {
     <div class="tiles">${rows.map(a => {
       const locked = a.tier === "locked", off = a.tier === "avoid";
       const ctl = locked ? `<span class="lock">🔒 Locked</span>` : off ? `<span class="lock">Not offered</span>`
+        : a.mcp ? (S.connections?.servers.some(x => x.id === a.mcp) ? `<span class="pill-s">✓ Connected</span>` : `<button class="mini on" data-mcon="${esc(a.mcp)}">Connect</button>`)
         : a.plug ? `<span class="pill-s">${esc(builtIn[a.plug] || "Built in")} ↑</span>`
         : `<label class="switch"><input type="checkbox" data-screen="${esc(a.id)}" ${on[a.id] ? "checked" : ""}><i></i></label>`;
       const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
-      const note = locked ? esc(cap(a.how.replace("Locked: ", ""))) + ". I never open these." : a.plug ? "Uses the connection above" : esc(a.how);
+      const note = locked ? esc(cap(a.how.replace("Locked: ", ""))) + ". I never open these." : a.mcp ? "Official connection · sign in with your own account" : a.plug ? "Uses the connection above" : esc(a.how);
       return `<div class="tile ${locked || off ? "locked" : ""} ${on[a.id] ? "is-on" : ""}"><span class="t-ic">${esc(a.name[0] || "?")}</span><span class="t-txt"><b>${esc(a.name)}</b><small>${note}</small></span>${ctl}</div>`;
     }).join("")}</div>
     <p class="ob-foot">${canScreen ? "For apps with a switch, I work the app on your screen, the way you would. You see a banner while I work and can stop me any time. Buttons that send, delete or pay always ask you first." : ""}${hidden ? ` ${hidden} other ${hidden === 1 ? "app isn't" : "apps aren't"} shown.` : ""}</p>
@@ -108,7 +137,10 @@ export function deviceApps(el) {
     await post("/api/settings", { screenApps: { [id]: e.target.checked } });
     await ctx.refresh(); deviceApps(el);
   };
-  el.onclick = async e => { if (e.target.id === "dev-rescan") { e.target.textContent = "Looking…"; await scanDevice(); deviceApps(el); } };
+  el.onclick = async e => {
+    if (e.target.id === "dev-rescan") { e.target.textContent = "Looking…"; await scanDevice(); deviceApps(el); }
+    if (e.target.dataset.mcon) { await connectMcp({ id: e.target.dataset.mcon }, e.target); deviceApps(el); }
+  };
 }
 
 // ---- permissions inside a native app: one button each, and the row ticks itself when the permission arrives
@@ -185,7 +217,7 @@ function renderStep() {
     <div class="perm"><span><b>🎙 Microphone</b><small>So you can talk to me. I only listen after you tap the core or press Space.</small></span><button class="mini" id="p-mic">Allow</button></div>
     <div class="perm"><span><b>🔔 Alerts</b><small>For timers, reminders, and payments that need your OK.</small></span><button class="mini" id="p-notif">Allow</button></div>
     <div class="perm"><span><b>🔊 Talk back</b><small>I say my answers out loud.</small></span><label class="switch"><input type="checkbox" id="p-voice" ${ctx.prefs.talkBack() ? "checked" : ""}><i></i></label></div>`;
-  if (id === "apps") { body.innerHTML = `<div class="ob-kick">Step 3 of 5</div><h2>Connect your apps</h2><p class="ob-lead">Tick the apps you use. I can only touch the ones you turn on. Change this any time in Settings.</p><div id="ob-apps"></div><div id="ob-dev"></div>`; appTiles($("#ob-apps")); deviceApps($("#ob-dev")); }
+  if (id === "apps") { body.innerHTML = `<div class="ob-kick">Step 3 of 5</div><h2>Connect your apps</h2><p class="ob-lead">Tick the apps you use. I can only touch the ones you turn on. Change this any time in Settings.</p><div id="ob-apps"></div><div id="ob-more"></div><div id="ob-dev"></div>`; appTiles($("#ob-apps")); moreApps($("#ob-more")); deviceApps($("#ob-dev")); }
   if (id === "money") { body.innerHTML = `<div class="ob-kick">Step 4 of 5</div><h2>Set your money rules</h2><p class="ob-lead">Payments are in test mode, so no real money moves. These rules are checked in code, every time.</p><div id="ob-money"></div>`; moneyRules($("#ob-money")); }
   if (id === "done") {
     const tries = ["Order my usual and put the delivery time in my calendar and WhatsApp Riya the ETA", "Open YouTube and search for lofi beats and set a timer for 10 minutes", "Brief me"];
@@ -230,7 +262,7 @@ export function openSettings(tab = "account") {
       <div><b>${esc(me.name || "You")}</b><small>${esc(me.email || (S.host === "node" ? "Running on this computer" : ""))}</small><span class="badge">${me.role === "owner" ? "Owner" : "Invited"}</span></div></div>
     <div class="set-row"><span>Run the setup again<small>Apps, money rules, permissions.</small></span><button class="mini" id="st-rerun">Start setup</button></div>
     ${S.host === "cloudflare" ? `<div class="set-row"><span>Sign out<small>On this device.</small></span><a class="mini" href="/auth/logout" id="st-signout">Sign out</a></div>` : ""}`;
-  if (tab === "apps") { el.innerHTML = `<p class="set-lead">I can only use the apps you turn on here. Locked apps can never be turned on.</p><div id="st-apps"></div><div id="st-dev"></div>${native ? `<h4 class="tiles-h">Permissions</h4><div id="st-perms"></div>` : ""}`; appTiles($("#st-apps")); deviceApps($("#st-dev")); if (native) native.permissions().then(p => $("#st-perms") && nativePerms($("#st-perms"), p)); }
+  if (tab === "apps") { el.innerHTML = `<p class="set-lead">I can only use the apps you turn on here. Locked apps can never be turned on.</p><div id="st-apps"></div><div id="st-more"></div><div id="st-dev"></div>${native ? `<h4 class="tiles-h">Permissions</h4><div id="st-perms"></div>` : ""}`; appTiles($("#st-apps")); moreApps($("#st-more")); deviceApps($("#st-dev")); if (native) native.permissions().then(p => $("#st-perms") && nativePerms($("#st-perms"), p)); }
   if (tab === "money") { el.innerHTML = `<p class="set-lead">Checked in code before every payment. Test mode: no real money moves.</p><div id="st-money"></div>`; moneyRules($("#st-money")); }
   if (tab === "brain") {
     const b = S.brain || {};

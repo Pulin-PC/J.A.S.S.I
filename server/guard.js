@@ -58,6 +58,9 @@ export function decide({ tool, kind, args = {}, amount = 0, origin = "you", bloc
     return { level: "auto", reason: "you let me work in this app" };
   }
 
+  // A connected app's tool that can move money: the amount can't be checked from here, so it always needs a fingerprint.
+  if (kind === "spend") return { level: "fingerprint", reason: "this can spend money" };
+
   if (kind === "send") {
     if (origin === "content") return { level: "fingerprint", reason: "a message to other people, started by something I read" };
     return { level: "confirm", reason: "it goes to other people" };

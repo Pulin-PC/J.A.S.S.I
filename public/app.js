@@ -669,7 +669,8 @@ async function boot() {
   for (const a of s.pending) showOk(a);
   const q = new URLSearchParams(location.search);
   const back = LS.get("jassi.return"); LS.set("jassi.return", "");
-  if (q.get("connected")) toast("Connected", `${q.get("connected") === "gmail" ? "Gmail" : "Google Calendar"} is connected. I'll use your real one now.`);
+  const con = q.get("connected");
+  if (con) toast("Connected", con === "gmail" || con === "calendar" ? `${con === "gmail" ? "Gmail" : "Google Calendar"} is connected. I'll use your real one now.` : `${con} is connected.`);
   if (q.get("error")) toast("Something went wrong", q.get("error"));
   if (q.toString()) history.replaceState(null, "", location.pathname);
   if (!s.onboarded) return openOnboarding(back === "onboard" ? 2 : 0);

@@ -52,6 +52,8 @@ export class JassiHub extends DurableObject {
       // device tokens: the directory only learns "this hash belongs to this person", so the Worker can route the device here
       registerDevice: hash => dir().fetch("https://dir/devkey/put", { method: "POST", body: JSON.stringify({ hash, sub: this.me?.sub }) }),
       unregisterDevice: hash => dir().fetch("https://dir/devkey/delete", { method: "POST", body: JSON.stringify({ hash }) }),
+      // a connected app's sign-in comes back to the Worker with only this random state; the directory maps it to the person
+      registerMcpState: state => dir().fetch("https://dir/mcpstate/put", { method: "POST", body: JSON.stringify({ state, sub: this.me?.sub }) }),
       save, spentToday, addSpent: n => { spentToday(); state.spent.amount += n; save(); },
       diary: entry => {
         const day = today();
@@ -131,6 +133,7 @@ export class JassiHub extends DurableObject {
       if (!this.me || this.me.sub !== me.sub || this.me.role !== me.role || this.me.name !== me.name) { this.me = me; this.ctx.storage.put("me", me); }
     }
     if (this.me) this.r.me = { name: this.me.name, email: this.me.email, picture: this.me.picture, role: this.me.role };
+    this.r.origin = request.headers.get("x-jassi-origin") || this.r.origin || url.origin;
     return withRt(this.r, () => this.handle(request, url));
   }
 
@@ -160,7 +163,9 @@ export class JassiHub extends DurableObject {
     const headers = Object.fromEntries(request.headers);
     const r = await api(request.method, url.pathname, request.method === "POST" ? await request.text() : "", headers, url.searchParams);
     if (!r) return json({ error: "not found" }, 404);
-    return new Response(r.body, { status: r.status, headers: { "content-type": r.type, ...(r.headers || {}) } });
+    const out = { "content-type": r.type, ...(r.headers || {}) };
+    if (r.app) { out["x-jassi-app"] = r.app; out["x-jassi-data"] = JSON.stringify(r.data || {}); }   // read and removed by the Worker
+    return new Response(r.body, { status: r.status, headers: out });
   }
 }
 
@@ -240,6 +245,13 @@ export class JassiDirectory extends DurableObject {
         const a = await S.get(k);
         if (a) await S.delete(k);
         return json(a && a.exp > Date.now() ? { ok: true, challenge: a.challenge, data: a.data } : { ok: false });
+      }
+      // ---- a connected app's sign-in in progress: random state -> person (10 minutes, single use)
+      case "/mcpstate/put": { if (body.state && body.sub) await S.put("mcpstate:" + body.state, { sub: body.sub, exp: Date.now() + 10 * 60e3 }); return json({ ok: true }); }
+      case "/mcpstate/take": {
+        const k = "mcpstate:" + String(body.state || ""), m = await S.get(k);
+        if (m) await S.delete(k);
+        return json({ sub: m && m.exp > Date.now() ? m.sub : null });
       }
       // ---- native app device tokens (only the SHA-256 is ever stored)
       case "/devkey/put": { if (body.hash && body.sub) await S.put("devkey:" + body.hash, body.sub); return json({ ok: true }); }
@@ -375,9 +387,18 @@ async function route(req, env) {
       const proof = b64url(await crypto.subtle.digest("SHA-256", enc.encode(url.searchParams.get("v") || "")));
       if (!r.ok || r.challenge !== proof) return back("/?error=" + encodeURIComponent("Sign-in expired. Please try again."));
       if (r.data.error) return back("/?error=" + encodeURIComponent(r.data.error));
-      if (r.data.connected) return back("/?connected=" + r.data.connected);
+      if (r.data.connected) return back("/?connected=" + encodeURIComponent(r.data.connected));
       const s = await sign({ ...r.data.session, exp: Date.now() + 30 * DAY }, secret);
       return back("/", [setCookie(SESSION, s, { maxAge: 30 * 86400, secure })]);
+    }
+    // A connected app (Notion, Zomato…) sends the browser back here after the person signs in there.
+    if (p === "/auth/mcp/callback") {
+      const { sub } = await (await dirOf(env).fetch("https://dir/mcpstate/take", { method: "POST", body: JSON.stringify({ state: url.searchParams.get("state") || "" }) })).json();
+      if (!sub) return back("/?error=" + encodeURIComponent("That sign-in took too long. Please try again."));
+      const res = await hubFor(env, sub).fetch(new Request(req.url, { headers: { "x-jassi-origin": url.origin } }));
+      const app = appChallenge(res.headers.get("x-jassi-app"));
+      if (app) return back(await appLink(app, JSON.parse(res.headers.get("x-jassi-data") || "{}")));
+      return back(res.headers.get("location") || "/");
     }
     if (p === "/auth/logout") return back("/", [setCookie(SESSION, "", { maxAge: 0, secure })]);
     // Local testing only (wrangler dev with DEV_LOGIN=1): sign in without Google.
@@ -441,7 +462,7 @@ async function route(req, env) {
         const r = await (await dirOf(env).fetch("https://dir/mcpkey", { method: "POST", body: JSON.stringify({ sub: session.sub, regen: !!b.regen }) })).json();
         return json({ url: url.origin + "/mcp", key: r.key });
       }
-      return forward(req, hubFor(env, session.sub), { "x-jassi-me": JSON.stringify({ sub: session.sub, email: session.email, name: session.name, picture: session.picture, role: session.role }) });
+      return forward(req, hubFor(env, session.sub), { "x-jassi-origin": url.origin, "x-jassi-me": JSON.stringify({ sub: session.sub, email: session.email, name: session.name, picture: session.picture, role: session.role }) });
     }
     return env.ASSETS.fetch(req);
   }

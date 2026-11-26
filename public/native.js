@@ -12,11 +12,14 @@ const AUTHV = "jassi.authv";
 
 // Sign-in and "connect" pages can't run inside the app (Google refuses WebViews), so they open in the system browser.
 // The app keeps a secret; the browser only ever sees its hash, and the one-time code that comes back is useless without the secret.
-export async function nativeAuth(path) {
+export async function authChallenge() {
   const v = b64url(crypto.getRandomValues(new Uint8Array(32)));
   try { localStorage.setItem(AUTHV, v); } catch {}
+  return b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v)));
+}
+export async function nativeAuth(path) {
   const u = new URL(path, location.origin);
-  u.searchParams.set("app", b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v))));
+  u.searchParams.set("app", await authChallenge());
   return native.openExternal(u.href);
 }
 onNative("auth", d => {

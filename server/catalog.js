@@ -37,6 +37,8 @@ const KNOWN = [
   [/^(app store|play store|google play|galaxy store|microsoft store|font book|migration assistant|siri|launchpad|mission control|boot camp)/i, "skip", "Built-in tool"],
 ];
 
+import { officialFor } from "./mcpclient.js";
+
 const norm = s => String(s || "").trim();
 
 export function lockedReason(app) {
@@ -51,7 +53,9 @@ export function classify(app, platform = "") {
   const base = { id, name };
   const why = lockedReason({ id, name });
   if (why) return { ...base, tier: "locked", how: "Locked: " + why };
-  for (const [pat, tier, how, extra] of KNOWN) if (pat.test(name)) return { ...base, tier, how, ...(extra || {}) };
+  const mcp = officialFor(name);   // the company's own MCP server, when J.A.S.S.I can sign in to it
+  for (const [pat, tier, how, extra] of KNOWN) if (pat.test(name)) return { ...base, tier, how, ...(extra || {}), ...(mcp ? { mcp } : {}) };
+  if (mcp) return { ...base, tier: "official", how: "Official MCP", mcp };
   // No official route: J.A.S.S.I's own plug works the app on screen. iPhones don't allow that.
   return platform === "ios" ? { ...base, tier: "skip", how: "No connection on iPhone yet" }
     : { ...base, tier: "screen", how: "J.A.S.S.I plug · works the app on screen (beta)" };

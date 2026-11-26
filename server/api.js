@@ -8,6 +8,7 @@ import { mcpRespond } from "./mcp.js";
 import { LIMITS } from "./guard.js";
 import { pairDevice, unpairDevice, deviceFor, listDevices, nextOp, deviceResult } from "./device.js";
 import { classifyAll } from "./catalog.js";
+import { connectStart, connectFinish, disconnect, connectionsView } from "./mcpclient.js";
 
 const J = (status, obj) => ({ status, type: "application/json", body: JSON.stringify(obj) });
 const parse = t => { try { return JSON.parse(t || "{}") || {}; } catch { return {}; } };
@@ -28,7 +29,7 @@ export async function snapshot() {
     brain: await brainInfo(),
     tools: TOOLS.map(t => ({ name: t.name, kind: t.kind, app: t.app })),
     diaryDir: rt.diaryLabel, host: rt.host,
-    devices: listDevices(), scan: rt.state.scan || null,
+    devices: listDevices(), scan: rt.state.scan || null, connections: connectionsView(),
   };
 }
 
@@ -51,6 +52,12 @@ export async function api(method, path, bodyText, headers = {}, query = null) {
     if (path.endsWith("/result")) return method === "POST" ? J(200, { ok: deviceResult(dev, parse(bodyText)) }) : J(405, { ok: false });
     const op = await nextOp(dev, Math.max(0, Math.min(25, Number(query?.get?.("wait")) || 0)) * 1000);
     return op ? J(200, op) : { status: 204, type: "text/plain", body: "" };
+  }
+  // A connected app's sign-in page sends the browser back here. The host turns `app` into a link back to the native app.
+  if (path === "/auth/mcp/callback") {
+    const r = await connectFinish({ state: query?.get?.("state") || "", code: query?.get?.("code") || "", error: query?.get?.("error") || "" });
+    return { status: 302, type: "text/plain", body: "", headers: { location: r.ok ? "/?connected=" + encodeURIComponent(r.connected) : "/?error=" + encodeURIComponent(r.say) },
+      app: r.app || "", data: r.ok ? { connected: r.connected } : { error: r.say } };
   }
   const m = path.match(/^\/api\/ics\/([\w-]+)$/);
   if (m) return ics(m[1]);
@@ -79,7 +86,7 @@ export async function api(method, path, bodyText, headers = {}, query = null) {
     }
     // Start over with fresh demo data (keeps your apps and money rules).
     case "POST /api/reset": {
-      const keep = { settings: rt.state.settings, onboarded: rt.state.onboarded, brainUsed: rt.state.brainUsed, devices: rt.state.devices, scan: rt.state.scan };
+      const keep = { settings: rt.state.settings, onboarded: rt.state.onboarded, brainUsed: rt.state.brainUsed, devices: rt.state.devices, scan: rt.state.scan, mcp: rt.state.mcp, mcpAuth: rt.state.mcpAuth };
       for (const k of Object.keys(rt.state)) delete rt.state[k];
       Object.assign(rt.state, freshState(), keep);
       rt.save();
@@ -96,6 +103,11 @@ export async function api(method, path, bodyText, headers = {}, query = null) {
       rt.save();
       return J(200, { ok: true, scan: rt.state.scan });
     }
+    // ---- official MCP connections (Notion, Linear, Zomato…): connect with your own login, or paste any MCP server's link
+    case "POST /api/mcp/connect":
+      try { return J(200, await connectStart({ id: String(b.id || ""), url: String(b.url || ""), name: String(b.name || ""), app: String(b.app || "") })); }
+      catch (e) { return J(200, { ok: false, say: e.friendly ? e.message : "I couldn't connect that. Check the link and try again." }); }
+    case "POST /api/mcp/disconnect": return J(200, { ok: disconnect(String(b.id || "")) });
     case "POST /api/step": {
       const c = stepToCall(b.step || {});
       if (!c) return J(200, { ok: false, say: "I didn't get that." });

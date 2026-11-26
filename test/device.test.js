@@ -42,7 +42,7 @@ test("catalogue: money, ID, password and system apps are locked on every device"
 });
 
 test("catalogue: official and built-in plugs first, everything else gets the J.A.S.S.I screen plug (not on iPhone)", () => {
-  assert.deepEqual(classify({ id: "in.swiggy.android", name: "Swiggy" }), { id: "in.swiggy.android", name: "Swiggy", tier: "official", how: "Official MCP", plug: "swiggy" });
+  assert.deepEqual(classify({ id: "in.swiggy.android", name: "Swiggy" }), { id: "in.swiggy.android", name: "Swiggy", tier: "official", how: "Official MCP", plug: "swiggy", mcp: "swiggy" });
   assert.equal(classify({ id: "com.whatsapp", name: "WhatsApp" }).plug, "whatsapp");
   assert.equal(classify({ id: "com.amazon.mShop.android.shopping", name: "Amazon Shopping" }).tier, "avoid");
   assert.equal(classify({ id: "com.blinkit", name: "Blinkit" }, "android").tier, "screen");
