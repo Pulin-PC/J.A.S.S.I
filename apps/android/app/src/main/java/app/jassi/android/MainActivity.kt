@@ -98,6 +98,7 @@ class MainActivity : FragmentActivity() {
 
         bridge = Bridge(this, web)
         bridge.install()
+        Shell.bridge = bridge
         web.webViewClient = Pages()
         web.webChromeClient = Chrome()
 
@@ -172,6 +173,7 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
+        if (Shell.bridge === bridge) Shell.bridge = null
         web.destroy()
         super.onDestroy()
     }

@@ -16,6 +16,12 @@ typealias Reply = (JSONObject) -> Unit
 fun ok(): JSONObject = JSONObject().put("ok", true)
 fun fail(error: String): JSONObject = JSONObject().put("ok", false).put("error", error)
 
+/** Lets the screen service reach the page (for the "stopped" event) when the app's window exists. */
+object Shell {
+    @Volatile
+    var bridge: Bridge? = null
+}
+
 /**
  * window.jassiNative (contract §2). The page talks to us over a web message channel that
  * WebView itself only opens for the J.A.S.S.I origin; we also refuse anything that is not the main frame.
@@ -91,6 +97,8 @@ class Bridge(private val activity: MainActivity, private val web: WebView) {
             "openPermission" -> done(activity.openPermission((args as? String) ?: o.optString("kind")))
             "pair" -> worker.execute { done(pair(o)) }
             "unpair" -> worker.execute {
+                DeviceChannel.stop()
+                ScreenService.instance?.stopFromWeb()
                 Vault.clear(activity)
                 done(ok())
             }
@@ -100,7 +108,10 @@ class Bridge(private val activity: MainActivity, private val web: WebView) {
                 done(ok())
             }
             "notify" -> done(Notify.show(activity, o.optString("title"), o.optString("body")))
-            "stop" -> done(ok())
+            "stop" -> {
+                ScreenService.instance?.stopFromWeb()
+                done(ok())
+            }
             else -> done(fail("unsupported"))
         }
     }
@@ -112,6 +123,7 @@ class Bridge(private val activity: MainActivity, private val web: WebView) {
         if (deviceId.isBlank() || token.isBlank()) return fail("bad_request")
         if (!Origins.serverAllowed(server, BuildConfig.JASSI_URL, BuildConfig.DEBUG)) return fail("bad_server")
         Vault.save(activity, Vault.Pairing(Origins.of(server)!!, deviceId, token))
+        DeviceChannel.refresh(activity)   // starts now if screen control is on, otherwise when the user switches it on
         return ok()
     }
 }
