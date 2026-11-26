@@ -1,5 +1,5 @@
 // Sign-in screen, first-time setup (onboarding) and Settings. Plain words everywhere.
-import { native, nativeAuth } from "./native.js";
+import { native, nativeAuth, onNative } from "./native.js";
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const inr = n => "₹" + Math.round(n).toLocaleString("en-IN");
@@ -70,6 +70,66 @@ export function appTiles(el) {
   };
 }
 
+// ---- apps found on this device (native apps only). The server sorts them; locked ones can never be turned on.
+const PLATFORM_NAME = { android: "phone", ios: "iPhone", macos: "Mac", windows: "PC" };
+export async function scanDevice() {
+  if (!native) return null;
+  const r = await native.listApps().catch(() => null);
+  if (!r?.ok) return null;
+  const d = await post("/api/device/apps", { platform: native.platform, partial: !!r.partial, apps: (r.apps || []).map(a => ({ id: a.id, name: a.name })) });
+  await ctx.refresh();
+  native.setPolicy({ blockedApps: (d.scan?.apps || []).filter(a => a.tier === "locked").map(a => a.id) });   // the device refuses these too
+  return d.scan;
+}
+export function deviceApps(el) {
+  if (!native) { el.innerHTML = ""; return; }
+  const S = ctx.getS(), scan = S.scan, where = PLATFORM_NAME[native.platform] || "device";
+  if (!scan) { el.innerHTML = `<h4 class="tiles-h">On this ${where}</h4><p class="ob-foot" id="dev-scan-msg">Looking at the apps on this ${where}…</p>`; scanDevice().then(sc => sc ? deviceApps(el) : ($("#dev-scan-msg").textContent = `I couldn't read the app list on this ${where}.`)); return; }
+  const on = S.settings.screenApps || {}, builtIn = Object.fromEntries(S.apps.map(a => [a.id, a.name]));
+  const rows = scan.apps.filter(a => a.tier !== "skip"), hidden = scan.apps.length - rows.length;
+  const canScreen = native.platform !== "ios";
+  el.innerHTML = `<h4 class="tiles-h">On this ${where} <small>${scan.apps.length} apps found${scan.partial ? " (iPhones only let me see well-known apps)" : ""}</small></h4>
+    <div class="tiles">${rows.map(a => {
+      const locked = a.tier === "locked", off = a.tier === "avoid";
+      const ctl = locked ? `<span class="lock">🔒 Locked</span>` : off ? `<span class="lock">Not offered</span>`
+        : a.plug ? `<span class="pill-s">${esc(builtIn[a.plug] || "Built in")} ↑</span>`
+        : `<label class="switch"><input type="checkbox" data-screen="${esc(a.id)}" ${on[a.id] ? "checked" : ""}><i></i></label>`;
+      const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
+      const note = locked ? esc(cap(a.how.replace("Locked: ", ""))) + ". I never open these." : a.plug ? "Uses the connection above" : esc(a.how);
+      return `<div class="tile ${locked || off ? "locked" : ""} ${on[a.id] ? "is-on" : ""}"><span class="t-ic">${esc(a.name[0] || "?")}</span><span class="t-txt"><b>${esc(a.name)}</b><small>${note}</small></span>${ctl}</div>`;
+    }).join("")}</div>
+    <p class="ob-foot">${canScreen ? "For apps with a switch, I work the app on your screen, the way you would. You see a banner while I work and can stop me any time. Buttons that send, delete or pay always ask you first." : ""}${hidden ? ` ${hidden} other ${hidden === 1 ? "app isn't" : "apps aren't"} shown.` : ""}</p>
+    <button class="ghost small" id="dev-rescan">Look again</button>`;
+  el.onchange = async e => {
+    const id = e.target.dataset.screen;
+    if (!id) return;
+    await post("/api/settings", { screenApps: { [id]: e.target.checked } });
+    await ctx.refresh(); deviceApps(el);
+  };
+  el.onclick = async e => { if (e.target.id === "dev-rescan") { e.target.textContent = "Looking…"; await scanDevice(); deviceApps(el); } };
+}
+
+// ---- permissions inside a native app: one button each, and the row ticks itself when the permission arrives
+const PERMS = [
+  ["screen", "👆 See and tap your screen", "So I can work in apps that have no connection of their own. A banner shows while I work and you can stop me any time. Bank, UPI, ID and password apps stay locked.", "Open Settings"],
+  ["mic", "🎙 Microphone", "So you can talk to me. I only listen after you tap the core.", "Allow"],
+  ["speech", "🗣 Understand speech", "Turns what you say into words.", "Allow"],
+  ["notifications", "🔔 Alerts", "For timers, reminders, and things that need your OK.", "Allow"],
+];
+let permWait = "";   // the permission the user just went to switch on
+function nativePerms(el, perms) {
+  el.innerHTML = PERMS.filter(([k]) => perms[k] && perms[k] !== "unsupported").map(([k, t, d, btn]) =>
+    `<div class="perm"><span><b>${t}</b><small>${d}</small></span>${perms[k] === "granted" ? `<button class="mini on" disabled>✓ Allowed</button>` : `<button class="mini" data-perm="${k}">${btn}</button>`}</div>`).join("");
+  el.onclick = e => { const k = e.target.dataset.perm; if (!k) return; permWait = k; e.target.textContent = "Waiting…"; native.openPermission(k); };
+}
+onNative("permission", d => {
+  const el = $("#ob-perms") || $("#st-perms");
+  if (!el || !d.permissions) return;
+  nativePerms(el, d.permissions);
+  if (permWait === "screen" && d.permissions.screen === "granted" && $("#ob-perms")) { permWait = ""; step++; renderStep(); }   // setup moves on by itself
+  else if (d.permissions[permWait] === "granted") permWait = "";
+});
+
 export function moneyRules(el) {
   const S = ctx.getS();
   const st = S.settings;
@@ -111,13 +171,19 @@ function renderStep() {
     <div class="ob-kick">Step 1 of 5</div><h2>Hi ${esc(first)}. I'm J.A.S.S.I.</h2>
     <p class="ob-lead">I do things in your apps when you ask, out loud or by typing. Setup takes about a minute.</p>
     <ul class="ob-list"><li><b>Talk normally.</b> "Order my usual and tell Riya when it arrives."</li><li><b>I start while you're still talking</b>, so simple things are done before you finish.</li><li><b>You stay in charge.</b> Money and messages to other people always ask you first.</li></ul>`;
-  if (id === "allow") body.innerHTML = `
+  if (id === "allow" && native) {
+    body.innerHTML = `<div class="ob-kick">Step 2 of 5</div><h2>Let me help in your apps</h2>
+      <p class="ob-lead">Each one is your choice. Tap the button and I'll take you to the right place.</p>
+      <div id="ob-perms"></div>
+      <div class="perm"><span><b>🔊 Talk back</b><small>I say my answers out loud.</small></span><label class="switch"><input type="checkbox" id="p-voice" ${ctx.prefs.talkBack() ? "checked" : ""}><i></i></label></div>`;
+    native.permissions().then(p => $("#ob-perms") && nativePerms($("#ob-perms"), p));
+  } else if (id === "allow") body.innerHTML = `
     <div class="ob-kick">Step 2 of 5</div><h2>Let me hear you</h2>
     <p class="ob-lead">These are optional. You can always type instead.</p>
     <div class="perm"><span><b>🎙 Microphone</b><small>So you can talk to me. I only listen after you tap the core or press Space.</small></span><button class="mini" id="p-mic">Allow</button></div>
     <div class="perm"><span><b>🔔 Alerts</b><small>For timers, reminders, and payments that need your OK.</small></span><button class="mini" id="p-notif">Allow</button></div>
     <div class="perm"><span><b>🔊 Talk back</b><small>I say my answers out loud.</small></span><label class="switch"><input type="checkbox" id="p-voice" ${ctx.prefs.talkBack() ? "checked" : ""}><i></i></label></div>`;
-  if (id === "apps") { body.innerHTML = `<div class="ob-kick">Step 3 of 5</div><h2>Connect your apps</h2><p class="ob-lead">Tick the apps you use. I can only touch the ones you turn on. Change this any time in Settings.</p><div id="ob-apps"></div>`; appTiles($("#ob-apps")); }
+  if (id === "apps") { body.innerHTML = `<div class="ob-kick">Step 3 of 5</div><h2>Connect your apps</h2><p class="ob-lead">Tick the apps you use. I can only touch the ones you turn on. Change this any time in Settings.</p><div id="ob-apps"></div><div id="ob-dev"></div>`; appTiles($("#ob-apps")); deviceApps($("#ob-dev")); }
   if (id === "money") { body.innerHTML = `<div class="ob-kick">Step 4 of 5</div><h2>Set your money rules</h2><p class="ob-lead">Payments are in test mode, so no real money moves. These rules are checked in code, every time.</p><div id="ob-money"></div>`; moneyRules($("#ob-money")); }
   if (id === "done") {
     const tries = ["Order my usual and put the delivery time in my calendar and WhatsApp Riya the ETA", "Open YouTube and search for lofi beats and set a timer for 10 minutes", "Brief me"];
@@ -161,8 +227,8 @@ export function openSettings(tab = "account") {
     <div class="acct">${me.picture ? `<img src="${esc(me.picture)}" alt="" referrerpolicy="no-referrer">` : `<span class="acct-i">${esc((me.name || "?")[0])}</span>`}
       <div><b>${esc(me.name || "You")}</b><small>${esc(me.email || (S.host === "node" ? "Running on this computer" : ""))}</small><span class="badge">${me.role === "owner" ? "Owner" : "Invited"}</span></div></div>
     <div class="set-row"><span>Run the setup again<small>Apps, money rules, permissions.</small></span><button class="mini" id="st-rerun">Start setup</button></div>
-    ${S.host === "cloudflare" ? `<div class="set-row"><span>Sign out<small>On this device.</small></span><a class="mini" href="/auth/logout">Sign out</a></div>` : ""}`;
-  if (tab === "apps") { el.innerHTML = `<p class="set-lead">I can only use the apps you turn on here. Locked apps can never be turned on.</p><div id="st-apps"></div>`; appTiles($("#st-apps")); }
+    ${S.host === "cloudflare" ? `<div class="set-row"><span>Sign out<small>On this device.</small></span><a class="mini" href="/auth/logout" id="st-signout">Sign out</a></div>` : ""}`;
+  if (tab === "apps") { el.innerHTML = `<p class="set-lead">I can only use the apps you turn on here. Locked apps can never be turned on.</p><div id="st-apps"></div><div id="st-dev"></div>${native ? `<h4 class="tiles-h">Permissions</h4><div id="st-perms"></div>` : ""}`; appTiles($("#st-apps")); deviceApps($("#st-dev")); if (native) native.permissions().then(p => $("#st-perms") && nativePerms($("#st-perms"), p)); }
   if (tab === "money") { el.innerHTML = `<p class="set-lead">Checked in code before every payment. Test mode: no real money moves.</p><div id="st-money"></div>`; moneyRules($("#st-money")); }
   if (tab === "brain") {
     const b = S.brain || {};
@@ -191,6 +257,7 @@ export function openSettings(tab = "account") {
     <div class="set-row"><span>Start over with fresh demo data<small>Clears orders, payments, events and timers. Keeps your apps and money rules.</small></span><button class="mini danger" id="st-reset">Reset</button></div>`;
   el.onclick = async e => {
     if (e.target.id === "st-rerun") { closeSettings(); openOnboarding(1); }
+    if (e.target.id === "st-signout" && native) { e.preventDefault(); await ctx.unpair(); location.href = "/auth/logout"; }
     if (e.target.id === "st-reset") {
       if (e.target.dataset.sure !== "1") { e.target.dataset.sure = "1"; e.target.textContent = "Tap again to reset"; return; }
       await post("/api/reset"); await ctx.refresh(); ctx.toast("Fresh start", "Demo data is reset."); e.target.textContent = "Done"; e.target.dataset.sure = "";

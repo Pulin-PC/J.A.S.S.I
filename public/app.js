@@ -1,6 +1,7 @@
 // J.A.S.S.I dashboard: live speech -> reflex parser (mid-sentence) -> server tools (through the safety guard).
 import { Parser, STABLE_MS } from "./reflex.js";
 import { initSetup, showSignin, openOnboarding, openSettings, closeSettings } from "./setup.js";
+import { native, onNative } from "./native.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -36,10 +37,19 @@ function pickVoice() {
   voice = vs.find(v => /Daniel|Arthur|Oliver/i.test(v.name) && /en-GB/i.test(v.lang)) || vs.find(v => /en-GB/i.test(v.lang)) || vs.find(v => /en-IN/i.test(v.lang)) || vs.find(v => /^en/i.test(v.lang)) || null;
 }
 if ("speechSynthesis" in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+// Stop talking, wherever the voice comes from (the browser, or the native app's own voice).
+function hush() { try { window.speechSynthesis?.cancel(); } catch {} if (native) { native.speakStop(); clearTimeout(speak.t); } }
 function speak(text) {
-  if (!talkBack || !("speechSynthesis" in window) || !text) return;
+  if (!talkBack || !text) return;
+  const clean = text.replace(/₹/g, "rupees ").replace(/J\.A\.S\.S\.I/g, "Jassi");
+  if (native) {   // WebViews have no reliable voice of their own
+    hush(); native.speak({ text: clean, lang: "en-IN" }); setMode("speaking");
+    speak.t = setTimeout(() => { if (document.body.classList.contains("speaking")) setMode("idle"); }, Math.min(15000, 600 + clean.length * 65));
+    return;
+  }
+  if (!("speechSynthesis" in window)) return;
   speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text.replace(/₹/g, "rupees ").replace(/J\.A\.S\.S\.I/g, "Jassi"));
+  const u = new SpeechSynthesisUtterance(clean);
   if (voice) u.voice = voice;
   u.rate = 1.06; u.pitch = .95;
   u.onstart = () => setMode("speaking");
@@ -142,7 +152,7 @@ class Utterance {
     updateStats();
     const rest = this.steps.map((s, i) => [s, i]).filter(([, i]) => !this.fired.has(i));
     if (!rest.length) return;
-    if (rest.some(([s]) => s.kind === "stop")) { speechSynthesis.cancel(); setMode("idle"); reply("Okay."); return; }
+    if (rest.some(([s]) => s.kind === "stop")) { hush(); native?.stop(); setMode("idle"); reply("Okay."); return; }
     // yes / no for an open approval (never for fingerprint ones)
     if (pendingOk && pendingOk.level === "confirm" && this.steps.length === 1) {
       if (/^(yes|yeah|yep|sure|do it|send it|go ahead|confirm|ok|okay)\b/i.test(this.text)) return answerOk(true);
@@ -213,6 +223,7 @@ function afterResult(r) {
 
 function openLink(url, r) {
   if (!LS.get("jassi.autoOpen") || LS.get("jassi.autoOpen") === "on") {
+    if (native) return void native.openExternal(new URL(url, location.href).href);
     const w = window.open(url, "_blank", "noopener");
     if (!w && !openLink.warned) { openLink.warned = true; toast("Pop-ups blocked", "Use the button on the action card, or allow pop-ups for this page."); }
   }
@@ -310,6 +321,7 @@ function showOk(a) {
   $("#f-fill").style.strokeDashoffset = 339.3; $("#finger").classList.remove("done");
   sfx.alert();
   speak(a.level === "fingerprint" ? `${a.title}. I need your fingerprint.` : `${a.title}. Should I go ahead?`);
+  if (native && document.hidden) native.notify({ title: a.level === "fingerprint" ? "Fingerprint needed" : "Needs your OK", body: a.title });
   clearInterval(showOk.t);
   const end = a.at + a.timeoutMs;
   showOk.t = setInterval(() => { const s = Math.max(0, Math.round((end - Date.now()) / 1000)); $("#ok-timer").textContent = s + " s"; }, 250);
@@ -338,7 +350,18 @@ $("#ok-no").onclick = $("#ok-no2").onclick = () => answerOk(false);
     if (p >= 1) { f.classList.remove("holding"); f.classList.add("done"); setTimeout(() => answerOk(true), 250); return; }
     raf = requestAnimationFrame(tick);
   };
-  const down = e => { e.preventDefault(); if (f.classList.contains("done")) return; start = performance.now(); f.classList.add("holding"); beep(520, .05); raf = requestAnimationFrame(tick); };
+  let bio = !!native;   // native apps ask for the real fingerprint / face; if the device has none, hold-to-approve stays
+  const down = async e => {
+    e.preventDefault(); if (f.classList.contains("done")) return;
+    if (bio) {
+      const id = pendingOk?.id;
+      const r = await native.biometric({ reason: pendingOk?.title || "Approve" }).catch(() => ({ ok: false }));
+      if (r.ok && pendingOk?.id === id) { f.classList.add("done"); return void setTimeout(() => answerOk(true), 150); }
+      if (r.error === "unsupported") bio = false;
+      return;
+    }
+    start = performance.now(); f.classList.add("holding"); beep(520, .05); raf = requestAnimationFrame(tick);
+  };
   const up = () => { if (f.classList.contains("done")) return; cancelAnimationFrame(raf); f.classList.remove("holding"); $("#f-fill").style.strokeDashoffset = 339.3; };
   f.addEventListener("pointerdown", down); f.addEventListener("pointerup", up); f.addEventListener("pointerleave", up);
 })();
@@ -384,7 +407,7 @@ $("#btn-brief").onclick = () => runText("brief me", false);
 function runText(text, likeVoice = $("#sim").checked) {
   text = text.trim();
   if (!text) return;
-  speechSynthesis?.cancel();
+  hush();
   seenWords.clear();
   cur = new Utterance(likeVoice ? "sim" : "typed");
   setMode("listening");
@@ -405,10 +428,37 @@ $("#cmd").onsubmit = e => { e.preventDefault(); const v = $("#cmd-in").value; $(
 
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let rec = null, silence = null, micStream = null, analyser = null;
+// Inside a native app the device's own speech engine listens and sends the words over the bridge.
+let nativeU = null;
+async function listenNative() {
+  if (rec) return stopListening();
+  hush();
+  seenWords.clear();
+  cur = new Utterance("voice");
+  nativeU = cur;
+  rec = { stop() { native.listenStop(); } };
+  setMode("listening");
+  $("#heard").innerHTML = `<span class="hint">Listening…</span>`;
+  sfx.fire();
+  const r = await native.listenStart({ lang: "en-IN" }).catch(() => ({ ok: false }));
+  if (!r.ok) { stopListening(); toast("Can't listen", r.error === "unsupported" ? "This device can't listen. You can type instead." : "Allow the microphone in Settings, under Apps, then try again."); }
+}
+onNative("speech", d => {
+  const u = nativeU;
+  if (!rec || !u || u.ended) return;
+  const text = String(d.text || "").replace(/\s+/g, " ").trim();
+  if (!text) return;
+  u.onText(text, false);
+  clearTimeout(silence);
+  silence = setTimeout(() => { u.onText(text, true); stopListening(); }, d.final ? 250 : 900);
+});
+onNative("speech-end", () => { const u = nativeU; if (!rec) return; if (u?.text && !u.ended) u.onText(u.text, true); stopListening(); });
+
 async function startListening() {
+  if (native) return listenNative();
   if (!SR) { toast("No voice here", "This browser can't listen. Use Chrome, or type instead."); return; }
   if (rec) return stopListening();
-  speechSynthesis?.cancel();
+  hush();
   seenWords.clear();
   cur = new Utterance("voice");
   const u = cur;
@@ -462,14 +512,14 @@ document.addEventListener("keydown", e => {
     if (e.key === "Enter" && pendingOk?.level === "confirm") answerOk(true);
     return;
   }
-  if (e.key === "Escape") { $("#brief").hidden = true; closeSettings(); speechSynthesis?.cancel(); stopListening(); }
+  if (e.key === "Escape") { $("#brief").hidden = true; closeSettings(); hush(); stopListening(); }
   if (!$("#settings").hidden || !$("#onboard").hidden || !$("#signin").hidden) return;
   if (e.code === "Space" && !/INPUT|TEXTAREA|BUTTON/.test(document.activeElement.tagName)) { e.preventDefault(); startListening(); }
 });
 $("#btn-voice").onclick = () => {
   talkBack = !talkBack; LS.set("jassi.voice", talkBack ? "on" : "off");
   $("#btn-voice").setAttribute("aria-pressed", talkBack); $("#btn-voice").title = "Talk back: " + (talkBack ? "on" : "off");
-  if (!talkBack) speechSynthesis?.cancel();
+  if (!talkBack) hush();
 };
 $("#btn-voice").setAttribute("aria-pressed", talkBack);
 $("#btn-attack").onclick = async () => {
@@ -542,6 +592,7 @@ setInterval(() => {
     t.rang = true; sfx.ring();
     const tt = toast(t.label === "Timer" ? "Time's up" : t.label === "Alarm" ? "Alarm" : "Reminder", t.label, "ring", { label: "OK", fn: () => {} });
     speak(t.label === "Timer" ? "Your timer is done." : `Reminder: ${t.label}`);
+    native?.notify({ title: t.label === "Timer" ? "Time's up" : t.label === "Alarm" ? "Alarm" : "Reminder", body: t.label });
     setTimeout(() => tt.remove(), 30000);
   }
   if (S) renderUpcoming();
@@ -629,7 +680,33 @@ async function boot() {
   if (back === "settings") return openSettings("apps");
   ready();
 }
+// ---- native apps: pair this device once per person, so the server can ask it to work on screen (never on iPhone)
+const deviceKey = () => "jassi.device." + (S?.me?.email || "local");
+async function ensurePaired() {
+  if (!native || native.platform === "ios" || !S) return;
+  const have = LS.get(deviceKey());
+  if (have && (S.devices || []).some(d => d.id === have)) return;
+  const names = { android: "Android phone", macos: "Mac", windows: "Windows PC" };
+  const r = await post("/api/device/pair", { platform: native.platform, name: names[native.platform] || "Device" });
+  if (!r.token) return;
+  const ok = await native.pair({ server: location.origin, deviceId: r.deviceId, token: r.token }).catch(() => null);
+  if (ok?.ok) LS.set(deviceKey(), r.deviceId); else post("/api/device/unpair", { deviceId: r.deviceId });
+}
+async function unpair() {
+  if (!native) return;
+  const id = LS.get(deviceKey());
+  LS.set(deviceKey(), "");
+  await native.unpair().catch(() => {});
+  if (id) await post("/api/device/unpair", { deviceId: id }).catch(() => {});
+}
+let isReady = false, heldAsk = "";
+onNative("ask", d => { const t = String(d.text || "").trim(); if (!t) return; if (isReady) runText(t, false); else heldAsk = t; });   // Siri, Shortcuts, a hotkey
+onNative("stopped", () => { setMode("idle"); toast("Stopped", "I stopped working on your screen."); });
+
 function ready() {
+  isReady = true;
+  ensurePaired();
+  if (heldAsk) { const t = heldAsk; heldAsk = ""; return void setTimeout(() => runText(t, false), 300); }
   if (LS.get("jassi.briefDay") !== new Date().toDateString() && !new URLSearchParams(location.search).has("nobrief") && S.settings.apps.books) setTimeout(() => runText("brief me", false), 500);
 }
 function renderMe() {
@@ -640,7 +717,7 @@ function renderMe() {
 $("#btn-settings").onclick = () => openSettings();
 $("#btn-me").onclick = () => openSettings("account");
 initSetup({
-  getS: () => S, refresh, toast, runText: t => runText(t), ready,
+  getS: () => S, refresh, toast, runText: t => runText(t), ready, unpair,
   prefs: { talkBack: () => talkBack, setTalkBack: v => { talkBack = v; LS.set("jassi.voice", v ? "on" : "off"); $("#btn-voice").setAttribute("aria-pressed", v); } },
 });
 if (LS.get("jassi.sim") === "off") $("#sim").checked = false;
