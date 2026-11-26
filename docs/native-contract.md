@@ -43,6 +43,7 @@ Events, shell → web: `window.dispatchEvent(new CustomEvent("jassi-native", { d
 | `speech` | `text`, `final` | Words heard so far (send partial results). |
 | `speech-end` | `error?` | Listening stopped. |
 | `auth` | `url` | A `jassi://auth…` link opened the app. Queue it until the page has loaded. |
+| `ask` | `text` | Words handed in from outside the app (Siri / Shortcuts, a share sheet, a global hotkey). Queue it until the page has loaded. |
 | `stopped` | `by: "user"` | The user pressed Stop, or took over the mouse/keyboard/screen. |
 
 ## 3. Sign-in
