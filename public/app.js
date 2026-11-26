@@ -813,8 +813,17 @@ async function boot() {
 const deviceKey = () => "jassi.device." + (S?.me?.email || "local");
 async function ensurePaired() {
   if (!native || native.platform === "ios" || !S) return;
+  // Paired means the server hears this app polling, not just that we remember an id: the app can lose its token
+  // (Keychain wiped, a rebuild, a 401). Give a freshly opened app a few seconds to check in, then pair again.
   const have = LS.get(deviceKey());
-  if (have && (S.devices || []).some(d => d.id === have)) return;
+  const online = devs => (devs || []).some(d => d.id === have && d.online);
+  if (have && online(S.devices)) return;
+  if (have && (S.devices || []).some(d => d.id === have)) {
+    await new Promise(r => setTimeout(r, 4000));
+    const st = await fetch("/api/state").then(r => r.json()).catch(() => null);
+    if (online(st?.devices)) return;
+    post("/api/device/unpair", { deviceId: have }).catch(() => {});
+  }
   const names = { android: "Android phone", macos: "Mac", windows: "Windows PC" };
   const r = await post("/api/device/pair", { platform: native.platform, name: names[native.platform] || "Device" });
   if (!r.token) return;
