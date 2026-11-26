@@ -173,6 +173,12 @@ fn hang_up(l: &Listening) {
 
 /// Ends session `id` (if it is still the current one) and tells the web app: `speech-end`.
 fn end(app: &AppHandle, id: u64, error: Option<&str>) {
+    end_session(app, id, error, true)
+}
+
+/// `announce: false` when a new `listenStart` replaces this session: a `speech-end` for the old
+/// one would arrive after the new one began, and the web app would take it as the new one ending.
+fn end_session(app: &AppHandle, id: u64, error: Option<&str>, announce: bool) {
     let ended = {
         let mut current = LISTENING.lock().unwrap();
         if current.as_ref().is_some_and(|l| l.0.id == id) {
@@ -184,6 +190,9 @@ fn end(app: &AppHandle, id: u64, error: Option<&str>) {
     let Some(MainOnly(l)) = ended else { return };
     hang_up(&l);
     unsafe { l.task.cancel() };
+    if !announce {
+        return;
+    }
     let error = if l.stopping { None } else { error };
     match error {
         Some(e) => shell::emit(app, json!({ "type": "speech-end", "error": e })),
@@ -253,7 +262,7 @@ pub fn listen_start(app: &AppHandle, lang: String) -> Res<()> {
     app.run_on_main_thread(move || {
         let old = LISTENING.lock().unwrap().as_ref().map(|l| l.0.id);
         if let Some(old) = old {
-            end(&on_main, old, None);
+            end_session(&on_main, old, None, false);
         }
         let _ = tx.send(start_on_main(on_main.clone(), lang));
     })

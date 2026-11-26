@@ -31,7 +31,8 @@
     "shortDescription": "One assistant for all your apps",
     "macOS": {
       "minimumSystemVersion": "11.0",
-      "signingIdentity": "-"
+      "signingIdentity": "-",
+      "entitlements": "entitlements.plist"
     }
   },
   "plugins": {
