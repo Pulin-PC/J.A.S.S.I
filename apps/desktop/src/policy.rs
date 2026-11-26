@@ -390,10 +390,11 @@ pub fn same_origin(a: &Url, b: &Url) -> bool {
     a.scheme() == b.scheme() && a.host_str() == b.host_str() && a.port_or_known_default() == b.port_or_known_default()
 }
 
-/// `openExternal` and outside links: only ordinary web, mail and phone links reach the default browser.
+/// `openExternal` and outside links: only ordinary web, mail and phone links reach the default browser,
+/// plus `whatsapp:` so a chat opens in the installed WhatsApp app (the page falls back to wa.me if it isn't there).
 pub fn external_ok(link: &str) -> bool {
     match Url::parse(link) {
-        Ok(u) => matches!(u.scheme(), "http" | "https" | "mailto" | "tel") && link.len() <= 4096,
+        Ok(u) => matches!(u.scheme(), "http" | "https" | "mailto" | "tel" | "whatsapp") && link.len() <= 4096,
         Err(_) => false,
     }
 }
@@ -591,6 +592,7 @@ mod tests {
     fn outside_links_are_web_mail_or_phone_only() {
         assert!(external_ok("https://wa.me/919999999999?text=hi"));
         assert!(external_ok("mailto:someone@example.com"));
+        assert!(external_ok("whatsapp://send?phone=919999999999&text=hi"));
         assert!(!external_ok("file:///etc/passwd"));
         assert!(!external_ok("x-apple.systempreferences:com.apple.preference.security"));
         assert!(!external_ok("ms-settings:privacy"));
