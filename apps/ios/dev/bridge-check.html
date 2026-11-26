@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>J.A.S.S.I bridge check</title>
+<style>
+  body { margin: 0; padding: 12px; background: #01060c; color: #d8f6ff; font: 13px/1.35 -apple-system, sans-serif; }
+  h1 { font-size: 15px; margin: 0 0 6px; color: #3ce8ff; }
+  h2 { font-size: 12px; margin: 12px 0 4px; color: #3ce8ff; text-transform: uppercase; letter-spacing: .08em; }
+  button { background: #3ce8ff; color: #01060c; border: 0; border-radius: 6px; padding: 7px 9px; margin: 0 4px 6px 0; font: 600 12px -apple-system, sans-serif; }
+  pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: 11px/1.35 ui-monospace, Menlo, monospace; }
+  .ok { color: #4dffb0; } .no { color: #ffb84d; }
+</style>
+</head>
+<body>
+<h1>J.A.S.S.I bridge check</h1>
+<pre id="about"></pre>
+
+<h2>Needs a tap</h2>
+<div id="buttons"></div>
+
+<h2>Events from the app</h2>
+<pre id="events">(none yet)</pre>
+
+<h2>Calls and results</h2>
+<pre id="log"></pre>
+
+<script>
+// A throwaway page for testing the iPhone shell. It calls every method of window.jassiNative
+// and shows what came back. Serve it with stub_server.py and point JASSI_URL at it.
+var native = window.jassiNative;
+var log = document.getElementById("log");
+var events = document.getElementById("events");
+var seen = 0;
+
+function show(call, result) {
+  var good = result && result.ok !== false;
+  log.innerHTML += '<span class="' + (good ? "ok" : "no") + '">' + call + "</span>\n  → " +
+    JSON.stringify(result).replace(/</g, "&lt;") + "\n";
+}
+
+function run(name, args, label) {
+  var call = name + "(" + (args === undefined ? "" : JSON.stringify(args)) + ")";
+  if (!native || typeof native[name] !== "function") { show(call, { ok: false, error: "missing method" }); return Promise.resolve(); }
+  return native[name](args).then(function (r) { show(label || call, r); }, function (e) { show(call, { ok: false, error: "REJECTED " + e }); });
+}
+
+window.addEventListener("jassi-native", function (e) {
+  seen += 1;
+  events.textContent = (seen === 1 ? "" : events.textContent) + seen + ". " + JSON.stringify(e.detail) + "\n";
+});
+
+document.getElementById("about").textContent = native
+  ? "window.jassiNative: platform=" + native.platform + " version=" + native.version + " contract=" + native.contract
+  : "window.jassiNative is MISSING (this page is not running inside the app, or not on the JASSI_URL origin)";
+
+var taps = [
+  ["Ask: mic", "openPermission", "mic"],
+  ["Ask: speech", "openPermission", "speech"],
+  ["Ask: alerts", "openPermission", "notifications"],
+  ["Permissions", "permissions"],
+  ["Face ID", "biometric", { reason: "Confirm it's you" }],
+  ["Speak", "speak", { text: "Hello, I am Jassi.", lang: "en-IN" }],
+  ["Stop speaking", "speakStop"],
+  ["Listen", "listenStart", { lang: "en-IN" }],
+  ["Stop listening", "listenStop"],
+  ["Alert", "notify", { title: "J.A.S.S.I", body: "This is a test alert." }],
+  ["Sign in", "openExternal", location.origin + "/auth/google/start?app=test"],
+  ["Open a site", "openExternal", "https://example.com/"],
+  ["List apps", "listApps"],
+];
+taps.forEach(function (t) {
+  var b = document.createElement("button");
+  b.textContent = t[0];
+  b.onclick = function () { run(t[1], t[2]); };
+  document.getElementById("buttons").appendChild(b);
+});
+
+// The calls that need no tap run by themselves, one after another.
+[
+  ["permissions"],
+  ["listApps"],
+  ["openPermission", "screen"],
+  ["pair", { server: location.origin, deviceId: "test-device", token: "test-token" }],
+  ["unpair"],
+  ["setPolicy", { blockedApps: ["com.example.bank"] }],
+  ["stop"],
+  ["speakStop"],
+  ["listenStop"],
+  ["notify", { title: "J.A.S.S.I", body: "Sent before alerts were allowed." }],
+  ["openExternal", "file:///etc/passwd"],
+  ["speak", {}],
+].reduce(function (chain, c) { return chain.then(function () { return run(c[0], c[1]); }); }, Promise.resolve());
+</script>
+</body>
+</html>
