@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { rt, today, freshState, makeBus, makeApprovals, diaryHeader, diaryEntry, parseDiary } from "./runtime.js";
+import { makeDeviceHub } from "./device.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const DATA = path.join(ROOT, "data");
@@ -48,6 +49,6 @@ export function diaryToday() {
   return fs.existsSync(file) ? parseDiary(fs.readFileSync(file, "utf8")) : [];
 }
 
-Object.assign(rt, { demo, state, save, spentToday, addSpent, approvals, bus: _bus, diary, readDiary, diaryToday,
+Object.assign(rt, { demo, state, save, spentToday, addSpent, approvals, bus: _bus, diary, readDiary, diaryToday, deviceHub: makeDeviceHub(),
   diaryLabel: "on this device · " + path.relative(ROOT, DIARY_DIR), host: "node",
   me: { name: demo.user.name, role: "owner", local: true } });

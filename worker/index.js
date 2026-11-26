@@ -7,6 +7,7 @@ import { DurableObject } from "cloudflare:workers";
 import demo from "../data/demo.json";
 import { withRt, makeBus, makeApprovals, freshState, today, hhmm, diaryHeader, diaryEntry, parseDiary } from "../server/runtime.js";
 import { api } from "../server/api.js";
+import { makeDeviceHub, hashToken } from "../server/device.js";
 import { cookies, setCookie, sign, unsign, randomId, pkce, b64url, googleAuthUrl, googleToken, readIdToken, SCOPES } from "./auth.js";
 
 const enc = new TextEncoder();
@@ -46,7 +47,10 @@ export class JassiHub extends DurableObject {
     const spentToday = () => { if (state.spent.date !== today()) state.spent = { date: today(), amount: 0 }; return state.spent.amount; };
     const dir = () => env.DIR.get(env.DIR.idFromName("directory"));
     this.r = {
-      demo, state, bus, approvals: makeApprovals(bus), host: "cloudflare",
+      demo, state, bus, approvals: makeApprovals(bus), host: "cloudflare", deviceHub: makeDeviceHub(),
+      // device tokens: the directory only learns "this hash belongs to this person", so the Worker can route the device here
+      registerDevice: hash => dir().fetch("https://dir/devkey/put", { method: "POST", body: JSON.stringify({ hash, sub: this.me?.sub }) }),
+      unregisterDevice: hash => dir().fetch("https://dir/devkey/delete", { method: "POST", body: JSON.stringify({ hash }) }),
       save, spentToday, addSpent: n => { spentToday(); state.spent.amount += n; save(); },
       diary: entry => {
         const day = today();
@@ -149,7 +153,7 @@ export class JassiHub extends DurableObject {
     }
     if (url.pathname === "/api/events") return sse(this.r.bus);
     const headers = Object.fromEntries(request.headers);
-    const r = await api(request.method, url.pathname, request.method === "POST" ? await request.text() : "", headers);
+    const r = await api(request.method, url.pathname, request.method === "POST" ? await request.text() : "", headers, url.searchParams);
     if (!r) return json({ error: "not found" }, 404);
     return new Response(r.body, { status: r.status, headers: { "content-type": r.type, ...(r.headers || {}) } });
   }
@@ -232,6 +236,10 @@ export class JassiDirectory extends DurableObject {
         if (a) await S.delete(k);
         return json(a && a.exp > Date.now() ? { ok: true, challenge: a.challenge, data: a.data } : { ok: false });
       }
+      // ---- native app device tokens (only the SHA-256 is ever stored)
+      case "/devkey/put": { if (body.hash && body.sub) await S.put("devkey:" + body.hash, body.sub); return json({ ok: true }); }
+      case "/devkey/delete": { await S.delete("devkey:" + body.hash); return json({ ok: true }); }
+      case "/devkey/lookup": return json({ sub: (await S.get("devkey:" + url.searchParams.get("h"))) || null });
       case "/mcpkey/lookup": return json({ sub: (await S.get("mcpkey:" + url.searchParams.get("key"))) || null });
       // ---- the Claude Code brain (one bridge on the owner's Mac serves everyone, one Claude process per person)
       case "/brain/status": return json({ on: this.brainOn });
@@ -399,6 +407,14 @@ async function route(req, env) {
       if (!sub) return json({ jsonrpc: "2.0", id: null, error: { code: -32001, message: "Sign in to J.A.S.S.I and copy your MCP link from Settings." } }, 401);
       const h = new Headers(req.headers); h.delete("authorization");
       return forward(new Request(req.url, { method: req.method, headers: h, body: req.method === "POST" ? await req.arrayBuffer() : undefined }), hubFor(env, sub));
+    }
+
+    // ---------------------------------------------------------- a paired native app asking for / reporting screen work (its token is the key)
+    if (p === "/api/device/next" || p === "/api/device/result") {
+      const tok = bearerOf(req);
+      const sub = tok.startsWith("jd_") ? (await (await dirOf(env).fetch("https://dir/devkey/lookup?h=" + await hashToken(tok))).json()).sub : null;
+      if (!sub) return json({ ok: false }, 401);
+      return forward(req, hubFor(env, sub));   // the person's own space checks the token again
     }
 
     // ---------------------------------------------------------- everything else under /api needs you to be signed in

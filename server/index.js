@@ -60,7 +60,7 @@ const server = http.createServer(async (req, res) => {
       return rt.bus.emit("brain", { on: brainBus.size > 0 });
     }
     if (url.pathname.startsWith("/api/") || url.pathname === "/mcp") {
-      const r = await api(req.method, url.pathname, req.method === "POST" ? await readBody(req) : "", req.headers);
+      const r = await api(req.method, url.pathname, req.method === "POST" ? await readBody(req) : "", req.headers, url.searchParams);
       if (r) { res.writeHead(r.status, { "content-type": r.type, ...(r.headers || {}) }); return res.end(r.body); }
       res.writeHead(404, { "content-type": "application/json" }); return res.end('{"error":"not found"}');
     }
