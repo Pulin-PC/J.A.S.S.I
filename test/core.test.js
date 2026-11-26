@@ -22,6 +22,16 @@ test("search after opening a site uses that site", () => {
   assert.equal(p.parse("open youtube and search for lofi beats")[1].args.engine, "youtube");
 });
 
+test("'open youtube / yt and type X' opens YouTube and searches it there", () => {
+  for (const said of ["Open youtube and type “tmkoc", "Open yt and type “tmkoc”", "open yt and type tmkoc in the search bar"]) {
+    const [open, search, more] = p.parse(said);
+    assert.equal(open.kind, "open_app"); assert.equal(open.args.app, "youtube");
+    assert.equal(search.kind, "search"); assert.equal(search.args.engine, "youtube"); assert.equal(search.args.q, "tmkoc");
+    assert.equal(more, undefined);
+  }
+  assert.deepEqual(kinds("type hello"), ["ask"]);   // no site to type into: the brain decides
+});
+
 test("a site name that is a prefix of a locked app does not fire early", () => {
   assert.equal(p.parse("open google")[0].early, false);
 });

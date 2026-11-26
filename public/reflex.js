@@ -10,7 +10,7 @@
 
 export const STABLE_MS = 140;
 
-const VERBS = "email|draft|open|launch|start|close|search|google|look up|find|play|pause|resume|skip|message|text|whatsapp|send|tell|" +
+const VERBS = "email|draft|open|launch|start|close|search|type|google|look up|find|play|pause|resume|skip|message|text|whatsapp|send|tell|" +
   "set|remind|note|order|get me|pay|transfer|navigate|take me|directions|add|put|schedule|create|make|book|read|check|" +
   "show|give|stop|call|save|write|brief|what|how";
 const SPLIT = new RegExp(
@@ -33,7 +33,10 @@ export const SITES = {
   google: "https://www.google.com", notion: "https://www.notion.so", razorpay: "https://dashboard.razorpay.com",
 };
 
-const ENGINES = "google|youtube|amazon|flipkart|wikipedia|github|reddit|linkedin|spotify|maps|google maps|swiggy|zomato";
+// Short names people say for an app.
+const APP_ALIAS = { yt: "youtube", "you tube": "youtube", "yt music": "youtube music", gmaps: "google maps", insta: "instagram", wa: "whatsapp" };
+
+const ENGINES ="google|youtube|amazon|flipkart|wikipedia|github|reddit|linkedin|spotify|maps|google maps|swiggy|zomato";
 
 export class Step {
   constructor(kind, args = {}, opts = {}) {
@@ -122,7 +125,9 @@ export class Parser {
       const prev = steps[i - 1], st = steps[i];
       if (st.kind === "search" && prev.kind === "open_app" && !/\bon\s+google\b/i.test(st.clause) && ENGINES.split("|").includes(prev.args.app)) st.args.engine = prev.args.app;
     }
-    return steps;
+    // "type X" only means a search right after opening a site that has one ("open youtube and type X"); otherwise the brain decides.
+    return steps.map((st, i) => st.typed && !(steps[i - 1]?.kind === "open_app" && ENGINES.split("|").includes(steps[i - 1].args.app))
+      ? new Step("ask", { text: st.clause }, { free: true, clause: st.clause }) : st);
   }
 
   clause(c) {
@@ -190,6 +195,11 @@ export class Parser {
       return S("search", { q: stripText(m[2]), engine: m[1].toLowerCase() }, { free: true });
     if ((m = c.match(new RegExp(`^(?:search|google|look up|lookup)(?:\\s+for)?\\s+(.+?)(?:\\s+(?:on|in|using)\\s+(${ENGINES}))?$`, "i"))))
       return S("search", { q: stripText(m[1]), engine: (m[2] || "google").toLowerCase() }, { free: true });
+    if ((m = c.match(/^type\s+(?:in\s+)?(.+?)(?:\s+(?:in|into)\s+(?:the\s+)?search(?:\s+(?:bar|box))?)?$/i))) {
+      const st = S("search", { q: stripText(m[1]), engine: "google" }, { free: true });
+      st[0].typed = true;
+      return st;
+    }
     if ((m = c.match(/^play\s+(.+?)(?:\s+(?:on|in|from)\s+(spotify|youtube|youtube music))?$/i)))
       return S("play", { q: stripText(m[1]), where: (m[2] || "youtube").toLowerCase() }, { free: true });
     if ((m = c.match(/^(?:navigate|take me|directions|get directions|drive|how do i get)\s+(?:to\s+)?(.+)$/i)))
@@ -197,7 +207,7 @@ export class Parser {
 
     // ---- open app / site
     if ((m = c.match(/^(?:open|launch|start|go to|bring up|show|pull up)\s+(?:up\s+)?(?:the\s+|my\s+)?(.+?)(?:\s+app)?$/i))) {
-      const t = stripText(m[1]).toLowerCase();
+      const t0 = stripText(m[1]).toLowerCase(), t = APP_ALIAS[t0] || t0;
       // "open google" may still become "open google pay" (locked) or "open google maps": don't fire early on a prefix.
       const longer = [...Object.keys(SITES), ...this.blocked].some(k => k.startsWith(t + " "));
       if (this.blocked.includes(t)) return S("open_app", { app: t });
