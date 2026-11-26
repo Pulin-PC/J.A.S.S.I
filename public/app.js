@@ -67,6 +67,7 @@ function setMode(m) {
   $("#state").textContent = MODE_TXT[m];
 }
 function reply(text, err = false) {
+  if (text && ear.mode !== "off") bubble({ text: String(text), who: "jassi" });
   const el = $("#reply");
   el.classList.toggle("err", err);
   el.textContent = "";
@@ -591,6 +592,7 @@ const ear = createEar({
     setMode("listening"); $("#heard").innerHTML = `<span class="hint">Listening…</span>`;
   },
   onText(text, final) {
+    bubble({ text, who: "you" });
     if (!cur || cur.ended || cur.source !== "ear") { seenWords.clear(); cur = new Utterance("ear"); }
     cur.onText(text, final);
     if (final) { bubble({ state: "thinking" }); talkDone.wait = 0; talkDone(15000); }
