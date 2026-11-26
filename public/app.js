@@ -368,6 +368,7 @@ function showOk(a) {
   const end = a.at + a.timeoutMs;
   showOk.t = setInterval(() => { const s = Math.max(0, Math.round((end - Date.now()) / 1000)); $("#ok-timer").textContent = s + " s"; }, 250);
   if (a.level === "confirm") setTimeout(() => $("#ok-yes").focus(), 50);
+  if (a.level === "fingerprint") fingerprint.open();
 }
 function hideOk() {
   pendingOk = null; $("#ok").hidden = true; clearInterval(showOk.t);
@@ -382,30 +383,45 @@ async function answerOk(yes) {
 }
 $("#ok-yes").onclick = () => answerOk(true);
 $("#ok-no").onclick = $("#ok-no2").onclick = () => answerOk(false);
-// fingerprint: hold for 1.2 s (stands in for the phone's fingerprint prompt)
-(() => {
-  const f = $("#finger"); let raf = 0, start = 0;
+// fingerprint: the native apps open the device's own prompt by themselves the moment approval is needed
+// (Android BiometricPrompt, Touch ID on a Mac, Windows Hello, Face ID / Touch ID on iPhone). Only a device with
+// none of those, or a plain browser, falls back to holding the button for 1.2 s.
+const fingerprint = (() => {
+  const f = $("#finger"), txt = $(".finger-txt"); let raf = 0, start = 0, asking = false;
   const HOLD = 1200;
+  let bio = !!native;
+  const label = () => {
+    txt.textContent = bio ? "Confirm with your fingerprint or face on this device" : "Hold to approve with your fingerprint";
+    f.setAttribute("aria-label", bio ? "Ask for my fingerprint again" : "Hold to approve with fingerprint");
+  };
   const tick = () => {
     const p = Math.min(1, (performance.now() - start) / HOLD);
     $("#f-fill").style.strokeDashoffset = 339.3 * (1 - p);
     if (p >= 1) { f.classList.remove("holding"); f.classList.add("done"); setTimeout(() => answerOk(true), 250); return; }
     raf = requestAnimationFrame(tick);
   };
-  let bio = !!native;   // native apps ask for the real fingerprint / face; if the device has none, hold-to-approve stays
-  const down = async e => {
+  async function ask() {
+    const id = pendingOk?.id;
+    if (!bio || asking || !id || pendingOk.level !== "fingerprint") return;
+    // the system prompt only shows while the app is in front: wait until it is
+    if (document.hidden) return void document.addEventListener("visibilitychange", () => pendingOk?.id === id && ask(), { once: true });
+    asking = true; f.classList.add("holding");
+    const r = await native.biometric({ reason: pendingOk.title || "Approve" }).catch(() => ({ ok: false }));
+    asking = false; f.classList.remove("holding");
+    if (pendingOk?.id !== id) return;
+    if (r.ok) { f.classList.add("done"); return void setTimeout(() => answerOk(true), 150); }
+    if (r.error === "unsupported") { bio = false; label(); return; }   // no sensor or none set up: hold the button instead
+    txt.textContent = "Not confirmed. Tap the fingerprint to try again";
+  }
+  const down = e => {
     e.preventDefault(); if (f.classList.contains("done")) return;
-    if (bio) {
-      const id = pendingOk?.id;
-      const r = await native.biometric({ reason: pendingOk?.title || "Approve" }).catch(() => ({ ok: false }));
-      if (r.ok && pendingOk?.id === id) { f.classList.add("done"); return void setTimeout(() => answerOk(true), 150); }
-      if (r.error === "unsupported") bio = false;
-      return;
-    }
+    if (bio) return void ask();
     start = performance.now(); f.classList.add("holding"); beep(520, .05); raf = requestAnimationFrame(tick);
   };
-  const up = () => { if (f.classList.contains("done")) return; cancelAnimationFrame(raf); f.classList.remove("holding"); $("#f-fill").style.strokeDashoffset = 339.3; };
+  const up = () => { if (bio || f.classList.contains("done")) return; cancelAnimationFrame(raf); f.classList.remove("holding"); $("#f-fill").style.strokeDashoffset = 339.3; };
   f.addEventListener("pointerdown", down); f.addEventListener("pointerup", up); f.addEventListener("pointerleave", up);
+  label();
+  return { open() { label(); setTimeout(ask, 300); } };   // a beat so the card is on screen behind the system prompt
 })();
 
 // ================================================================ brief
