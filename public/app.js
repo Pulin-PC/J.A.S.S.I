@@ -2,6 +2,7 @@
 import { Parser, STABLE_MS, ENGINES, SITES } from "./reflex.js";
 import { initSetup, showSignin, openOnboarding, openSettings, closeSettings } from "./setup.js";
 import { native, onNative } from "./native.js";
+import { createEar } from "./ear.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -40,12 +41,12 @@ if ("speechSynthesis" in window) { pickVoice(); speechSynthesis.onvoiceschanged 
 // Stop talking, wherever the voice comes from (the browser, or the native app's own voice).
 function hush() { try { window.speechSynthesis?.cancel(); } catch {} if (native) { native.speakStop(); clearTimeout(speak.t); } }
 function speak(text) {
-  if (!talkBack || !text) return;
+  if (!talkBack || !text) return void talkDone();
   const clean = text.replace(/₹/g, "rupees ").replace(/J\.A\.S\.S\.I/g, "Jassi");
   // The page's own voice (Daniel, en-GB) sounds natural on the desktop app too; phone WebViews have no reliable one.
   if (native && !(voice && !/^(android|ios)$/.test(native.platform))) {
-    hush(); native.speak({ text: clean, lang: "en-IN" }); setMode("speaking");
-    speak.t = setTimeout(() => { if (document.body.classList.contains("speaking")) setMode("idle"); }, Math.min(15000, 600 + clean.length * 65));
+    hush(); native.speak({ text: clean, lang: "en-IN" }); setMode("speaking"); bubble({ state: "speaking" });
+    speak.t = setTimeout(() => { if (document.body.classList.contains("speaking")) setMode("idle"); talkDone(); }, Math.min(15000, 600 + clean.length * 65));
     return;
   }
   if (!("speechSynthesis" in window)) return;
@@ -53,8 +54,8 @@ function speak(text) {
   const u = new SpeechSynthesisUtterance(clean);
   if (voice) u.voice = voice;
   u.rate = 1.06; u.pitch = .95;
-  u.onstart = () => setMode("speaking");
-  u.onend = () => { if (document.body.classList.contains("speaking")) setMode("idle"); };
+  u.onstart = () => { setMode("speaking"); bubble({ state: "speaking" }); };
+  u.onend = () => { if (document.body.classList.contains("speaking")) setMode("idle"); talkDone(); };
   speechSynthesis.speak(u);
 }
 
@@ -213,7 +214,7 @@ async function runCodeMode(steps) {
   for (const x of r.results || []) if (x.open) openLink(x.open, x);
   reply(r.say || "Done.", !r.ok);
   speak(r.say);
-  if (!talkBack) setMode("idle");
+  if (!talkBack) { setMode("idle"); talkDone(); }
   refresh();
 }
 
@@ -223,14 +224,14 @@ async function askBrain(text) {
   const r = await post("/api/ask", { text });
   reply(r.say || "…", !!r.error);
   speak(r.say);
-  if (!talkBack) setMode("idle");
+  if (!talkBack) { setMode("idle"); talkDone(); }
   refresh();
 }
 
 function afterResult(r) {
   if (r.needApp) toast("Not connected", r.say, "", { label: "Open Settings", fn: () => openSettings("apps") });
   if (r.say) { reply(r.say, !r.ok); speak(r.say); }
-  if (!talkBack || !r.say) setMode("idle");
+  if (!talkBack || !r.say) { setMode("idle"); talkDone(); }
   if (r.ok && r.open) openLink(r.open, r);
   if (r.ok && r.tool === "business_brief") showBrief(r);
   refresh();
@@ -533,9 +534,9 @@ async function meter() {
     loop();
   } catch {}
 }
-$("#mic").onclick = startListening;
-$("#reactor").onclick = startListening;
-$("#reactor").onkeydown = e => { if (e.key === "Enter") startListening(); };
+$("#mic").onclick = talkNow;
+$("#reactor").onclick = talkNow;
+$("#reactor").onkeydown = e => { if (e.key === "Enter") talkNow(); };
 document.addEventListener("keydown", e => {
   if (!$("#ok").hidden) {
     if (e.key === "Escape") answerOk(false);
@@ -544,7 +545,7 @@ document.addEventListener("keydown", e => {
   }
   if (e.key === "Escape") { $("#brief").hidden = true; closeSettings(); hush(); stopListening(); }
   if (!$("#settings").hidden || !$("#onboard").hidden || !$("#signin").hidden) return;
-  if (e.code === "Space" && !/INPUT|TEXTAREA|BUTTON/.test(document.activeElement.tagName)) { e.preventDefault(); startListening(); }
+  if (e.code === "Space" && !/INPUT|TEXTAREA|BUTTON/.test(document.activeElement.tagName)) { e.preventDefault(); talkNow(); }
 });
 $("#btn-voice").onclick = () => {
   talkBack = !talkBack; LS.set("jassi.voice", talkBack ? "on" : "off");
@@ -552,6 +553,67 @@ $("#btn-voice").onclick = () => {
   if (!talkBack) hush();
 };
 $("#btn-voice").setAttribute("aria-pressed", talkBack);
+// ================================================================ hands-free: say "Jassi"
+// Wake word → request → answer → 5 s to follow up → back to sleep. The floating bubble (native apps) shows where it is.
+// Android's own recogniser beeps on every restart, so an always-on loop there waits for the app's wake engine.
+const ANDROID = native ? native.platform === "android" : /Android/i.test(navigator.userAgent);
+let handsFree = LS.get("jassi.handsfree") ? LS.get("jassi.handsfree") !== "off" : !ANDROID || !!native?.wake;
+let bubbleGone = false;
+function bubble(o) {
+  if (!native?.bubble || !handsFree) return;
+  if (o.visible === false) bubbleGone = true;
+  if (bubbleGone && !o.visible) return;          // dragged to the bin: stays away until the next "Jassi"
+  native.bubble(o).catch(() => {});
+}
+onNative("bubble", d => {
+  if (d.action === "dismissed") { bubbleGone = true; return; }
+  if (d.action === "tap") {
+    if (document.body.classList.contains("speaking")) { hush(); setMode("idle"); return talkDone(0); }
+    if (ear.mode === "follow" || ear.mode === "req") { ear.pause(); setMode("idle"); return bubble({ state: "sleep" }); }
+    talkNow();
+  }
+});
+const ear = createEar({
+  native, onNative, SR, lang: "en-IN",
+  onWake() {
+    hush(); sfx.fire();
+    bubbleGone = false; bubble({ visible: true, state: "listening" });
+    setMode("listening"); $("#heard").innerHTML = `<span class="hint">Listening…</span>`;
+  },
+  onText(text, final) {
+    if (!cur || cur.ended || cur.source !== "ear") { seenWords.clear(); cur = new Utterance("ear"); }
+    cur.onText(text, final);
+    if (final) { bubble({ state: "thinking" }); talkDone.wait = 0; talkDone(15000); }
+  },
+  onState(m) {
+    if (m === "follow" || m === "req") { bubble({ state: "listening" }); if (!document.body.classList.contains("speaking")) setMode("listening"); }
+    if (m === "wake") bubble({ state: "sleep" });
+  },
+  onSleep() { if (document.body.classList.contains("listening")) setMode("idle"); },
+  onDenied() { toast("Microphone is off", "Allow the microphone for J.A.S.S.I, then say “Jassi”."); },
+});
+// After an answer (spoken, shown, or nothing to say): open the 5 s follow-up window. While the brain is still
+// working, keep waiting (up to 2 minutes) so J.A.S.S.I never hears its own answer.
+function talkDone(delay = 250) {
+  clearTimeout(talkDone.t);
+  talkDone.t = setTimeout(() => {
+    if (ear.mode !== "paused") return;
+    const busy = (window.speechSynthesis?.speaking) || document.body.classList.contains("thinking") || document.body.classList.contains("speaking");
+    if (busy && (talkDone.wait = (talkDone.wait || 0) + 1) < 12) return talkDone(delay > 1000 ? 10000 : 1000);
+    talkDone.wait = 0;
+    ear.follow();
+  }, delay);
+}
+function startHandsFree() {
+  if (!ear.supported) return;
+  if (ear.start()) bubble({ visible: true, state: "sleep" });
+}
+function stopHandsFree() { ear.stop(); if (native?.bubble) native.bubble({ visible: false }).catch(() => {}); }
+// The mic button, the core and Space: talk right now (with hands-free on, the same listener takes it).
+function talkNow() {
+  if (handsFree && ear.supported && ear.mode !== "off") { hush(); return void ear.now(); }
+  startListening();
+}
 $("#btn-attack").onclick = async () => {
   reply("Pretending I read the scam email and it told me to pay ₹4,999…");
   const r = await post("/api/attack");
@@ -723,6 +785,7 @@ async function boot() {
   $("#boot").classList.add("gone");
   LS.set("jassi.booted", new Date().toDateString());
   renderApps();
+  if (handsFree) startHandsFree();
   for (const a of s.pending) showOk(a);
   const q = new URLSearchParams(location.search);
   const back = LS.get("jassi.return"); LS.set("jassi.return", "");
@@ -772,7 +835,8 @@ $("#btn-settings").onclick = () => openSettings();
 $("#btn-me").onclick = () => openSettings("account");
 initSetup({
   getS: () => S, refresh, toast, runText: t => runText(t), ready, unpair,
-  prefs: { talkBack: () => talkBack, setTalkBack: v => { talkBack = v; LS.set("jassi.voice", v ? "on" : "off"); $("#btn-voice").setAttribute("aria-pressed", v); } },
+  prefs: { talkBack: () => talkBack, setTalkBack: v => { talkBack = v; LS.set("jassi.voice", v ? "on" : "off"); $("#btn-voice").setAttribute("aria-pressed", v); },
+    handsFree: () => handsFree, setHandsFree: v => { handsFree = v; LS.set("jassi.handsfree", v ? "on" : "off"); v ? startHandsFree() : stopHandsFree(); } },
 });
 if (LS.get("jassi.sim") === "off") $("#sim").checked = false;
 $("#boot").onclick = () => $("#boot").classList.add("gone");

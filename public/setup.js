@@ -272,6 +272,7 @@ export function openSettings(tab = "account") {
   }
   if (tab === "voice") {
     el.innerHTML = [
+      ["wake", "Say “Jassi” to talk", "I listen for my name, then keep listening 5 seconds after I answer so you can just keep talking. After 5 quiet seconds I wait for “Jassi” again.", ctx.prefs.handsFree()],
       ["talk", "Talk back", "Say my answers out loud.", ctx.prefs.talkBack()],
       ["sim", "Type like you talk", "Typed commands arrive word by word, so you see steps start mid-sentence.", $("#sim").checked],
       ["open", "Open apps by themselves", "WhatsApp, Maps and YouTube open in a new tab when ready. Your browser may ask you to allow pop-ups.", LS.get("jassi.autoOpen") !== "off"],
@@ -279,6 +280,7 @@ export function openSettings(tab = "account") {
     el.onchange = e => {
       const k = e.target.dataset.pref; if (!k) return;
       if (k === "talk") ctx.prefs.setTalkBack(e.target.checked);
+      if (k === "wake") ctx.prefs.setHandsFree(e.target.checked);
       if (k === "sim") { $("#sim").checked = e.target.checked; LS.set("jassi.sim", e.target.checked ? "on" : "off"); }
       if (k === "open") LS.set("jassi.autoOpen", e.target.checked ? "on" : "off");
     };

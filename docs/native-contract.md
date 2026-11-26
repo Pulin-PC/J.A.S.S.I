@@ -30,7 +30,9 @@ Fields: `platform` (`"android" | "ios" | "macos" | "windows"`), `version` (shell
 | `setPolicy({ blockedApps })` | `{ ok }` | App ids the shell must never read or act in (§4). Kept on the device. |
 | `openExternal(url)` | `{ ok }` | System browser or auth session (Custom Tabs, ASWebAuthenticationSession, default browser). |
 | `biometric({ reason })` | `{ ok }` | Real fingerprint, face, Touch ID or Windows Hello. |
-| `listenStart({ lang })` / `listenStop()` | `{ ok }` | Native speech-to-text. Sends `speech` events. |
+| `listenStart({ lang, onDevice })` / `listenStop()` | `{ ok }` | Native speech-to-text. Sends `speech` events. `onDevice: true` (hands-free): recognise on the device when it can, so an always-on microphone never streams audio off the device. |
+| `bubble({ visible?, state? })` | `{ ok }` | Optional. The small floating J.A.S.S.I bubble that stays over other apps. `visible: true` shows it (also after the user binned it), `false` hides it. `state`: `"sleep"` (dim, waiting for “Jassi”), `"listening"`, `"thinking"`, `"speaking"`. Draggable; dragging it onto the bin that appears hides it and sends `bubble` `dismissed`. Never takes focus from the app the user is in. iPhone: a Live Activity instead (iOS allows no window over other apps). |
+| `wake({ on, words })` | `{ ok }` | Optional, later. A dedicated on-device wake-word engine (Picovoice). Until a shell has it, the web app spots “Jassi” in `listenStart` transcripts. |
 | `speak({ text, lang })` / `speakStop()` | `{ ok }` | Native text-to-speech. |
 | `notify({ title, body })` | `{ ok }` | System notification. |
 | `stop()` | `{ ok }` | Abort any running screen action now. |
@@ -42,6 +44,7 @@ Events, shell → web: `window.dispatchEvent(new CustomEvent("jassi-native", { d
 | `permission` | `permissions` (same shape as above) | A permission changed. While the web app is in front, check once a second so setup moves on by itself. |
 | `speech` | `text`, `final` | Words heard so far (send partial results). |
 | `speech-end` | `error?` | Listening stopped. |
+| `bubble` | `action`: `"tap"` or `"dismissed"` | The user tapped the bubble (talk now / stop), or dragged it to the bin. |
 | `auth` | `url` | A `jassi://auth…` link opened the app. Queue it until the page has loaded. |
 | `ask` | `text` | Words handed in from outside the app (Siri / Shortcuts, a share sheet, a global hotkey). Queue it until the page has loaded. |
 | `stopped` | `by: "user"` | The user pressed Stop, or took over the mouse/keyboard/screen. |
