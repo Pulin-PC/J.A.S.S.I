@@ -205,13 +205,23 @@ async function runStep(st, { early, u, t }) {
   const r = await post("/api/step", { step: st, early });
   bindCard(card, r);
   if (t) { stats.times.push(performance.now() - t); updateStats(); }
+  if (handOver(r, st.clause, u?.text)) return;
   afterResult(r);
+}
+// A direct step that couldn't work out what you meant (an app or person it can't find, something missing) is not
+// the end: the brain gets your whole sentence and does it properly. Only when the brain is offline do you see the gap.
+function handOver(r, clause, text) {
+  if (r.ok || r.level !== "need" || !S?.brain?.on || !text) return false;
+  askBrain(`${text}\n[J.A.S.S.I couldn't do "${clause}" directly: ${r.say} Work out what was meant and do it.]`);
+  return true;
 }
 
 async function runCodeMode(steps) {
   setMode("thinking");
   const r = await post("/api/run", { steps });
   for (const x of r.results || []) if (x.open) openLink(x.open, x);
+  const gap = (r.results || []).find(x => !x.ok && x.level === "need");
+  if (gap && handOver(gap, gap.title || "one step", steps.map(s => s.clause).join(", "))) return refresh();
   reply(r.say || "Done.", !r.ok);
   speak(r.say);
   if (!talkBack) { setMode("idle"); talkDone(); }

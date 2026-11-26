@@ -126,3 +126,9 @@ test("messages in another app never become WhatsApp; a leftover surname is not a
   assert.deepEqual(q.parse("text mom hi")[0].args, { to: "Mom", text: "hi" });
   assert.deepEqual(q.parse("message aditi on whatsapp saying see you at 5")[0].args, { to: "Aditi", text: "see you at 5" });
 });
+
+test("'open' only acts on its own when it's a plain app or site name; anything more goes to the brain", () => {
+  assert.deepEqual(kinds("open aditi sinha’s instagram chat"), ["unknown"]);
+  assert.deepEqual(kinds("open my reels on insta"), ["unknown"]);
+  for (const t of ["open google maps", "open visual studio code", "open chrome", "open instagram.com/direct/inbox"]) assert.deepEqual(kinds(t), ["open_app"], t);
+});

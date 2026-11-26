@@ -55,6 +55,9 @@ const OTHER_CHAT = /\b(?:on|via|in|through|over|using)\s+(?:instagram|insta|ig|t
 // One-word messages that are really messages, not surnames.
 const ONE_WORD_MSG = new Set("hi hii hello hey ok okay k yes yeah yep no nope thanks thx ty bye sorry congrats congratulations done coming wait omw lol haha call home late soon".split(" "));
 
+// Words that mean "something inside an app", not an app's name.
+const NOT_A_NAME = /['’]s\b|\b(?:chat|chats|dm|dms|inbox|profile|page|account|story|stories|feed|post|posts|reel|reels|message|messages|conversation|group|channel|video|videos|song|playlist|setting|settings|tab|folder|file|document|photo|photos|of|with|for|from|on|in|at|to|and|her|his|their|our|last|latest|new)\b/i;
+
 // Short names people say for an app.
 export const APP_ALIAS = { vscode: "visual studio code", "vs code": "visual studio code", yt: "youtube", "you tube": "youtube", "yt music": "youtube music", gmaps: "google maps", insta: "instagram", wa: "whatsapp" };
 
@@ -235,7 +238,9 @@ export class Parser {
       if (this.blocked.includes(t)) return S("open_app", { app: t });
       if (SITES[t]) return S("open_app", { app: t }, { early: !longer });
       if (/^[\w-]+\.(com|in|org|io|dev|ai|net|co)(\/\S*)?$/.test(t)) return S("open_app", { app: t });
-      // Not a site I know: the server looks for that app on your device (it never guesses: found, or it says so)
+      // More than an app's name ("aditi's instagram chat", "my reels on insta"): the brain works out what to open and how.
+      if (t.split(/\s+/).length > 3 || NOT_A_NAME.test(t)) return S("unknown", { text: c }, { free: true });
+      // A plain name I don't know: the server looks for that app on your device (found, or the brain takes over)
       return S("open_app", { app: t }, { early: false, free: true });
     }
     return S("unknown", { text: c }, { free: true });
