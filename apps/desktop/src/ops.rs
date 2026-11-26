@@ -64,11 +64,12 @@ pub fn run(app: &AppHandle, op: &str, args: &Value) -> Result<Value, String> {
     }
     let shell = app.state::<Shell>();
     let control = &shell.control;
-    // Rule 5: only while paired, with the screen permission granted.
+    // Rule 5: only while paired, with the screen permission granted. Opening an app is what a Dock click does:
+    // it needs no permission (locked apps stay locked below), so "open X" works before screen control is set up.
     if !*shell.paired.lock().unwrap() {
         return Err("not_paired".into());
     }
-    if platform::screen_state() != "granted" {
+    if op != "open_app" && platform::screen_state() != "granted" {
         return Err("no_permission".into());
     }
     if control.holding() {
