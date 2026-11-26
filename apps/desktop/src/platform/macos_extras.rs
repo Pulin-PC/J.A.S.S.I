@@ -29,7 +29,7 @@ type Res<T> = Result<T, &'static str>;
 // ---------------------------------------------------------------- Touch ID
 
 /// Shows the system's Touch ID sheet and waits for the finger. Fingerprint only: no password fallback.
-pub fn biometric(reason: &str) -> Res<()> {
+pub fn biometric(_app: &AppHandle, reason: &str) -> Res<()> {
     let policy = LAPolicy::DeviceOwnerAuthenticationWithBiometrics;
     let context = unsafe { LAContext::new() };
     if unsafe { context.canEvaluatePolicy_error(policy) }.is_err() {

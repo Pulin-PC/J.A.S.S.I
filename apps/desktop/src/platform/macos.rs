@@ -132,7 +132,7 @@ pub fn open_permission(kind: &str) -> bool {
 
 // ---------------------------------------------------------------- alerts
 
-pub fn notify(title: &str, body: &str) -> Result<(), &'static str> {
+pub fn notify(_app: &tauri::AppHandle, title: &str, body: &str) -> Result<(), &'static str> {
     match notifications_state() {
         "granted" => {}
         "unsupported" => return Err("unsupported"),

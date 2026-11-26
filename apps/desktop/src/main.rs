@@ -15,7 +15,10 @@ mod store;
 use tauri::{Manager, WindowEvent};
 
 fn main() {
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(windows)]
+    let builder = builder.plugin(tauri_plugin_notification::init());
+    let app = builder
         // A second launch (for example Windows opening a jassi:// link) hands over to the running app.
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| shell::bring_to_front(app)))
         .plugin(tauri_plugin_deep_link::init())

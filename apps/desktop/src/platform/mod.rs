@@ -23,3 +23,16 @@ pub use macos_screen::*;
 mod macos_extras;
 #[cfg(target_os = "macos")]
 pub use macos_extras::*;
+
+#[cfg(windows)]
+mod win;
+#[cfg(windows)]
+pub use win::*;
+#[cfg(windows)]
+mod win_screen;
+#[cfg(windows)]
+pub use win_screen::*;
+#[cfg(windows)]
+mod win_extras;
+#[cfg(windows)]
+pub use win_extras::*;

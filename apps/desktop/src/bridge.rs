@@ -199,11 +199,11 @@ pub struct NotifyArgs {
 }
 
 #[tauri::command(async)]
-pub fn jn_notify(webview: Webview, shell: State<Shell>, args: NotifyArgs) -> Value {
+pub fn jn_notify(app: AppHandle, webview: Webview, shell: State<Shell>, args: NotifyArgs) -> Value {
     if !shell.allows(&webview) {
         return fail("not_allowed");
     }
-    result(platform::notify(&policy::cut(&args.title, 120), &policy::cut(&args.body, 500)))
+    result(platform::notify(&app, &policy::cut(&args.title, 120), &policy::cut(&args.body, 500)))
 }
 
 /// Abort any running screen action now.
@@ -223,11 +223,11 @@ pub struct ReasonArgs {
 
 /// Real fingerprint (Touch ID) or Windows Hello. Answers only after the person has used it or given up.
 #[tauri::command(async)]
-pub fn jn_biometric(webview: Webview, shell: State<Shell>, args: ReasonArgs) -> Value {
+pub fn jn_biometric(app: AppHandle, webview: Webview, shell: State<Shell>, args: ReasonArgs) -> Value {
     if !shell.allows(&webview) {
         return fail("not_allowed");
     }
-    result(platform::biometric(&policy::cut(&args.reason, 200)))
+    result(platform::biometric(&app, &policy::cut(&args.reason, 200)))
 }
 
 #[derive(Deserialize)]
