@@ -37,6 +37,59 @@
 	<false/>
 	<key>JassiURL</key>
 	<string>$(JASSI_URL)</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>maps</string>
+		<string>calshow</string>
+		<string>x-apple-reminderkit</string>
+		<string>mobilenotes</string>
+		<string>message</string>
+		<string>sms</string>
+		<string>tel</string>
+		<string>facetime</string>
+		<string>photos-redirect</string>
+		<string>music</string>
+		<string>shortcuts</string>
+		<string>shareddocuments</string>
+		<string>whatsapp</string>
+		<string>tg</string>
+		<string>sgnl</string>
+		<string>fb-messenger</string>
+		<string>instagram</string>
+		<string>fb</string>
+		<string>twitter</string>
+		<string>linkedin</string>
+		<string>snapchat</string>
+		<string>discord</string>
+		<string>pinterest</string>
+		<string>truecaller</string>
+		<string>googlegmail</string>
+		<string>comgooglemaps</string>
+		<string>googlechrome</string>
+		<string>googledrive</string>
+		<string>googlecalendar</string>
+		<string>googlephotos</string>
+		<string>googledocs</string>
+		<string>googlesheets</string>
+		<string>youtube</string>
+		<string>tez</string>
+		<string>phonepe</string>
+		<string>paytmmp</string>
+		<string>flipkart</string>
+		<string>zomato</string>
+		<string>swiggy</string>
+		<string>uber</string>
+		<string>spotify</string>
+		<string>nflx</string>
+		<string>slack</string>
+		<string>zoomus</string>
+		<string>msteams</string>
+		<string>ms-outlook</string>
+		<string>ms-word</string>
+		<string>ms-excel</string>
+		<string>ms-powerpoint</string>
+		<string>notion</string>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>
@@ -44,6 +97,12 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSFaceIDUsageDescription</key>
+	<string>J.A.S.S.I uses Face ID to check it is really you before it does something important.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>J.A.S.S.I listens when you tap the mic, so you can talk instead of typing.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>J.A.S.S.I turns what you say into words so it can understand you.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

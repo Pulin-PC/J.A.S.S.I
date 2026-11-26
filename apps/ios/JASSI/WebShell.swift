@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UserNotifications
 import WebKit
 import JassiCore
 
@@ -15,6 +16,10 @@ final class WebShell: NSObject, ObservableObject {
     private let base = AppConfig.origin
     private var queue = EventQueue()
     private let signIn = SignIn()
+    private let speaker = Speaker()
+    private lazy var listener = Listener { [weak self] event in self?.send(event) }
+    private var lastPermissions: PermissionSnapshot?
+    private var watcher: Task<Void, Never>?
 
     private override init() {
         let config = WKWebViewConfiguration()
@@ -31,6 +36,7 @@ final class WebShell: NSObject, ObservableObject {
         webView.configuration.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: BridgeScript.handlerName)
         webView.navigationDelegate = self
         webView.uiDelegate = self
+        UNUserNotificationCenter.current().delegate = Notifier.shared
         webView.isOpaque = false
         webView.backgroundColor = UIColor(Theme.background)
         webView.scrollView.backgroundColor = UIColor(Theme.background)
@@ -71,6 +77,36 @@ final class WebShell: NSObject, ObservableObject {
 
     private func run(_ call: BridgeCall) async -> [String: Any] {
         switch call {
+        case .listApps:
+            return AppLister.list()
+        case .permissions:
+            return await Permissions.snapshot().dictionary
+        case .openPermission(let kind):
+            guard kind != .screen else { return BridgeReply.unsupported }
+            await Permissions.open(kind)
+            await checkPermissions()
+            return BridgeReply.ok
+        case .pair(let server, let deviceId, let token):
+            return Pairing.save(server: server, deviceId: deviceId, token: token) ? BridgeReply.ok : BridgeReply.fail("failed")
+        case .unpair:
+            return Pairing.forget() ? BridgeReply.ok : BridgeReply.fail("failed")
+        case .setPolicy(let blockedApps):
+            Policy.save(blockedApps: blockedApps)
+            return BridgeReply.ok
+        case .biometric(let reason):
+            return await Biometric.confirm(reason: reason)
+        case .listenStart(let lang):
+            return listener.start(lang: lang)
+        case .listenStop:
+            return listener.stop()
+        case .speak(let text, let lang):
+            return speaker.speak(text: text, lang: lang, whileListening: listener.isListening)
+        case .speakStop:
+            return speaker.stop()
+        case .notify(let title, let body):
+            return await Notifier.shared.send(title: title, body: body)
+        case .stop:
+            return BridgeReply.ok // no screen actions run on iPhone, so there is never one to abort
         case .openExternal(let url):
             switch ExternalRoute.route(url, base: base) {
             case .authSession(let url):
@@ -81,9 +117,31 @@ final class WebShell: NSObject, ObservableObject {
             case .reject:
                 return BridgeReply.fail(BridgeFailure.badArgs.rawValue)
             }
-        default:
-            return BridgeReply.unsupported
         }
+    }
+
+    // MARK: Permissions
+
+    /// While the app is in front, look once a second and tell the page when an answer changes,
+    /// so the setup screen moves on by itself (contract §2).
+    func setActive(_ active: Bool) {
+        watcher?.cancel()
+        watcher = nil
+        guard active else { return }
+        watcher = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.checkPermissions()
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
+    }
+
+    private func checkPermissions() async {
+        let now = await Permissions.snapshot()
+        if let before = lastPermissions, before != now {
+            send(.permission(now))
+        }
+        lastPermissions = now
     }
 
     // MARK: Links

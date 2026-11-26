@@ -4,6 +4,7 @@ import WebKit
 /// The whole app: one WebView. The only native screen is the "can't reach" one (contract §1.2).
 struct RootView: View {
     @ObservedObject var shell: WebShell
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
@@ -15,6 +16,8 @@ struct RootView: View {
         }
         .preferredColorScheme(.dark)
         .onOpenURL { shell.handleIncoming($0) }
+        .onAppear { shell.setActive(scenePhase == .active) }
+        .onChange(of: scenePhase) { _, phase in shell.setActive(phase == .active) }
     }
 }
 
