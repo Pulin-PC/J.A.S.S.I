@@ -124,6 +124,14 @@ export function parseWhen(text, now = new Date()) {
   return { text: t.replace(/\s+/g, " ").trim().replace(/^[\s,.]+|[\s,.]+$/g, ""), when: when ? when.getTime() : null, seconds };
 }
 
+// A spoken or typed rupee amount -> number (0 if it isn't one).
+const AMT = "\\d[\\d,]*(?:\\.\\d+)?\\s*(?:k|thousand|lakhs?|lacs?)?";
+export function money(s) {
+  const m = String(s || "").trim().toLowerCase().match(/^(\d[\d,]*(?:\.\d+)?)\s*(k|thousand|lakhs?|lacs?)?$/);
+  if (!m) return 0;
+  return Math.round(parseFloat(m[1].replace(/,/g, "")) * (!m[2] ? 1 : /^(k|thousand)$/.test(m[2]) ? 1000 : 100000));
+}
+
 export class Parser {
   constructor(contacts = [], blocked = []) {
     this.setContacts(contacts);
@@ -168,10 +176,12 @@ export class Parser {
     if ((m = lc.match(/^(?:what did i|when did i|what'?s my usual|remember|recall)\s*(.*)$/))) return S("recall", { q: stripText(m[1] || lc) }, { free: true });
 
     // ---- money
-    if ((m = c.match(/^(?:pay|send|transfer)\s+(?:rs\.?|₹|inr|rupees)?\s*([\d,]+)\s*(?:rs|rupees|₹|inr)?\s+to\s+(.+?)(?:\s+for\s+(.+))?$/i))
-      || (m = c.match(/^pay\s+(.+?)\s+(?:rs\.?|₹|inr)?\s*([\d,]+)(?:\s*(?:rs|rupees))?(?:\s+for\s+(.+))?$/i))) {
-      const [amt, to] = /^[\d,]+$/.test(m[1]) ? [m[1], m[2]] : [m[2], m[1]];
-      return S("pay", { to: stripText(to), amount: +amt.replace(/,/g, ""), note: stripText(m[3] || "") }, { free: true });
+    // amounts: 6000 · 6,000 · ₹6000 · 5k · 2.5k · 6 thousand · 1 lakh (speech often adds a trailing "." too)
+    const cm = c.replace(/[\s.!?,]+$/, "");
+    if ((m = cm.match(new RegExp(`^(?:pay|send|transfer)\\s+(?:rs\\.?|₹|inr|rupees)?\\s*(${AMT})\\s*(?:rs|rupees|₹|inr)?\\s+to\\s+(.+?)(?:\\s+for\\s+(.+))?$`, "i")))
+      || (m = cm.match(new RegExp(`^pay\\s+(.+?)\\s+(?:rs\\.?|₹|inr|rupees)?\\s*(${AMT})(?:\\s*(?:rs|rupees))?(?:\\s+for\\s+(.+))?$`, "i")))) {
+      const [amt, to] = new RegExp(`^${AMT}$`, "i").test(m[1].trim()) ? [m[1], m[2]] : [m[2], m[1]];
+      return S("pay", { to: stripText(to), amount: money(amt), note: stripText(m[3] || "") }, { free: true });
     }
     if ((m = c.match(/^(?:order|get me|buy)\s+(.+?)(?:\s+(?:from|on)\s+(swiggy|zomato|instamart))?$/i)))
       return S("order", { item: stripText(m[1]).replace(/^(my|the|a|an|some)\s+/i, ""), from: (m[2] || "swiggy").toLowerCase() }, { free: true });

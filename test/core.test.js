@@ -62,6 +62,17 @@ test("payments parse both word orders", () => {
   assert.equal(p.parse("pay Rahul 250")[0].args.amount, 250);
 });
 
+test("payments understand 5k, thousand, lakh and a trailing full stop", () => {
+  const amt = t => { const s = p.parse(t)[0]; return s.kind === "pay" ? [s.args.to, s.args.amount] : s.kind; };
+  assert.deepEqual(amt("pay 5k to riya"), ["riya", 5000]);
+  assert.deepEqual(amt("transfer 10k to Riya"), ["Riya", 10000]);
+  assert.deepEqual(amt("pay 2.5k to Ravi"), ["Ravi", 2500]);
+  assert.deepEqual(amt("pay 6 thousand to riya"), ["riya", 6000]);
+  assert.deepEqual(amt("Pay Riya ₹6000."), ["Riya", 6000]);
+  assert.deepEqual(amt("pay riya 1 lakh"), ["riya", 100000]);
+  assert.deepEqual(amt("send ₹6,000 to riya."), ["riya", 6000]);
+});
+
 test("guard: money rules", () => {
   const pay = (amount, extra = {}) => decide({ tool: "pay", kind: "pay", amount, ...extra }).level;
   assert.equal(pay(4999), "auto");
