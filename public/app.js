@@ -348,9 +348,25 @@ function showBrief(b) {
   const h = new Date().getHours();
   $("#brief-part").textContent = h < 12 ? "morning" : h < 17 ? "afternoon" : "evening";
   $("#brief-name").textContent = S?.user?.name || "";
-  const pct = Math.min(100, b.sales / Math.max(b.sales, b.usual) * 100), mark = b.usual / Math.max(b.sales, b.usual) * 100;
+  const { pace: P, orders: O, margin: M, quality: Q } = b;
+  const num = n => Number(n).toLocaleString("en-IN");
+  const signed = n => (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n);
+  const arrow = (n, goodWhenUp = true) => n === 0 ? `<div class="s">` : `<div class="s ${(n > 0) === goodWhenUp ? "up" : "down"}">${n > 0 ? "▲" : "▼"} `;
+  const paceCard = !P.elapsed
+    ? `<div class="s">first day of the month</div><div class="calc">Need ${inr(P.target)} ÷ ${P.daysInMonth} days = ${inr(P.need_per_day)} a day</div>`
+    : `${arrow(P.pace_pct)}${P.pace_pct === 0 ? "right on pace" : `${Math.abs(P.pace_pct)}% ${P.pace_pct > 0 ? "ahead of" : "behind"} pace`} · of ${inr(P.target)}</div>
+      <div class="bar"><i style="width:${Math.min(100, P.done_pct)}%"></i><u style="left:${Math.min(100, P.expected / P.target * 100)}%"></u></div>
+      <div class="calc">Expected by now = ${inr(P.target)} × ${P.elapsed}/${P.daysInMonth} days = ${inr(P.expected)}<br>
+      Pace = ${inr(P.mtd)} ÷ ${inr(P.expected)} − 1 = ${signed(P.pace_pct)}%<br>
+      At ${inr(P.run_rate)}/day you'll end at ${inr(P.projected)} · need ${inr(P.need_per_day)}/day for the last ${P.daysLeft} days</div>`;
   $("#brief-grid").innerHTML = `
-    <div class="bx"><div class="k">Sales yesterday</div><div class="v">${inr(b.sales)}</div><div class="s ${b.diff >= 0 ? "up" : "down"}">${b.diff >= 0 ? "▲" : "▼"} ${Math.abs(b.diff)}% vs usual ${inr(b.usual)}</div><div class="bar"><i style="width:${pct}%"></i><u style="left:${mark}%"></u></div></div>
+    <div class="bx"><div class="k">Month to date vs target</div><div class="v">${inr(P.mtd)}</div>${paceCard}</div>
+    <div class="bx"><div class="k">Orders · avg order value</div><div class="v">${num(O.orders)} orders</div>${arrow(O.aov_vs_week_pct)}AOV ${inr(O.aov)} · ${O.aov_vs_week_pct ? Math.abs(O.aov_vs_week_pct) + "% vs" : "same as"} 7-day ${inr(O.aov_week)}</div>
+      <div class="calc">Yesterday: ${inr(O.sales)} ÷ ${num(O.orders)} orders = ${inr(O.aov)}<br>7 days: ${inr(O.week_sales)} ÷ ${num(O.week_orders)} orders = ${inr(O.aov_week)}</div></div>
+    <div class="bx"><div class="k">Gross margin · this week</div><div class="v">${M.pct}%</div>${arrow(M.change_pts)}${M.change_pts ? Math.abs(M.change_pts) + " pts vs" : "same as"} last week ${M.prev_pct}%</div>
+      <div class="calc">(${inr(M.week_sales)} sales − ${inr(M.week_cogs)} cost of goods) ÷ ${inr(M.week_sales)} = ${M.pct}%</div></div>
+    <div class="bx"><div class="k">Complaints / returns · 7 days</div><div class="v"${Q.worse ? ' style="color:var(--amber)"' : ""}>${Q.total}</div>${arrow(Q.total - Q.prev_total, false)}${Q.complaints} complaints · ${Q.returns} returns · last week ${Q.prev_total}</div>
+      <div class="calc">Per 100 orders: ${Q.total} ÷ ${num(O.week_orders)} × 100 = ${Q.per_100_orders} (last week ${Q.prev_per_100_orders})</div></div>
     <div class="bx"><div class="k">Cash in / out</div><div class="v">${inr(b.cash_in)}</div><div class="s">out ${inr(b.cash_out)} · net ${inr(b.cash_in - b.cash_out)}</div></div>
     <div class="bx"><div class="k">Overdue payments</div><div class="v" style="color:var(--amber)">${inr(b.due)}</div><div class="s">${b.overdue.length} customers</div></div>
     <div class="bx"><div class="k">Low stock</div><ul>${b.low_stock.map(x => `<li>${esc(x.item)} · ${x.left} left</li>`).join("")}</ul></div>

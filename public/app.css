@@ -293,6 +293,7 @@ body.listening .mic { animation: blink 1s infinite; }
 .bx .v { font: 700 24px var(--display); color: var(--c1); margin: 6px 0 2px; text-shadow: 0 0 12px var(--c2); }
 .bx .s { font-size: 13px; color: var(--dim); }
 .bx .s.up { color: var(--green); } .bx .s.down { color: var(--red); }
+.bx .calc { margin-top: 8px; padding-top: 7px; border-top: 1px dashed var(--line); font: 11px/1.5 var(--mono); color: var(--dim); }
 .bx.wide { grid-column: span 3; }
 .bx ul { margin: 6px 0 0; padding-left: 16px; color: var(--text); font-size: 14px; }
 .bar { height: 6px; background: var(--c3); margin-top: 8px; position: relative; }

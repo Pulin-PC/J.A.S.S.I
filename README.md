@@ -23,7 +23,7 @@ wHACKiest 2026 · Track 1: *Make MCP Matter* · Team J.A.S.S.I (MSRIT) — Round
 | **Prompt-injection guard** | "Read my emails" flags the scam email that tries to give the AI orders. *Test the guard* shows what happens if the AI obeys it: the payment is stopped and needs your fingerprint. |
 | **MCP server** | Every J.A.S.S.I tool is also served over MCP at `/mcp`. Claude Code or any other MCP client gets **the same guard, approvals and diary**. |
 | **Diary you own** | Every action (done, declined or blocked) is written as an Obsidian-style markdown note on your device: `data/diary/YYYY-MM-DD.md`. |
-| **Business brief** | The first time you open it each day: sales vs usual, cash, overdue payments, low stock, quiet deals, meetings, and **3 next steps, one tap each**. |
+| **Business brief** | The first time you open it each day: sales vs monthly target (pace, with the working shown), orders and average order value, gross margin vs last week, complaints and returns, cash, overdue payments, low stock, quiet deals, meetings, and **3 next steps, one tap each**. |
 | **Voice in and out** | Talk with the mic (Chrome speech recognition, en-IN). Replies are spoken back. Or type with *Like voice* on to watch mid-sentence actions without a mic. |
 | **Thinking brain = Claude Code** | Questions and tasks the quick parser doesn't know go to **Claude Code running on your Mac** (your own login, no API key; Haiku 5.5, medium effort). One warm process, so answers are fast. It acts only through J.A.S.S.I's MCP tools, so the same guard checks everything. Once it has read an email or page, its payments need your fingerprint. |
 

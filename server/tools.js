@@ -3,6 +3,7 @@
 // call() is the ONLY way to run a tool: it asks the guard, waits for your OK when needed, runs, and writes the diary.
 import { decide, looksLikeInjection } from "./guard.js";
 import { rt, hhmm } from "./runtime.js";
+import { businessMetrics } from "./metrics.js";
 import { SITES } from "../public/reflex.js";
 
 const inr = n => "₹" + Number(n).toLocaleString("en-IN");
@@ -217,21 +218,25 @@ export const TOOLS = [
   },
   {
     name: "business_brief", kind: "read", app: "books",
-    description: "Today's business brief from connected tools: sales vs usual, cash, overdue payments, quiet deals, low stock, meetings, top 3 next steps.",
+    description: "Today's business brief from connected tools: sales vs monthly target (pace), orders and average order value, gross margin vs last week, complaints and returns, cash, overdue payments, quiet deals, low stock, meetings, top 3 next steps.",
     inputSchema: S({}),
     title: () => "Business brief",
     run() {
       const b = rt.demo.business;
-      const diff = Math.round((b.sales_yesterday / b.sales_usual - 1) * 100);
+      const { pace, orders, margin, quality } = businessMetrics(b);
       const due = b.overdue.reduce((s, o) => s + o.amount, 0);
       const steps = [
         { label: `Send payment reminders to ${b.overdue.length} customers (${inr(due)})`, say: "send payment reminders" },
         { label: `Reorder ${b.low_stock[1].item}`, say: "order coffee beans" },
         { label: `Nudge ${b.quiet_deals[0].name} (quiet ${b.quiet_deals[0].days_quiet} days)`, say: "email Rahul saying any update on the Hotel Lalit catering deal?" },
       ];
+      const paceSay = !pace.elapsed ? `It's the first day of the month: you need ${inr(pace.need_per_day)} a day to reach ${inr(pace.target)}.`
+        : `This month you've sold ${inr(pace.mtd)} of your ${inr(pace.target)} target, ${pace.pace_pct === 0 ? "right on pace" : `${Math.abs(pace.pace_pct)}% ${pace.pace_pct > 0 ? "ahead of" : "behind"} pace`}.`;
+      const marginSay = margin.change_pts === 0 ? `Gross margin is ${margin.pct}%, same as last week.`
+        : `Gross margin is ${margin.pct}%, ${margin.change_pts > 0 ? "up" : "down"} ${Math.abs(margin.change_pts)} points on last week.`;
       return {
-        say: `Yesterday's sales were ${inr(b.sales_yesterday)}, ${Math.abs(diff)}% ${diff >= 0 ? "above" : "below"} usual. ${inr(due)} is overdue from ${b.overdue.length} customers. ${b.low_stock.length} items are low. You have ${b.meetings_today.length} meetings today.`,
-        sales: b.sales_yesterday, usual: b.sales_usual, diff, cash_in: b.cash_in, cash_out: b.cash_out, overdue: b.overdue, due,
+        say: `${paceSay} Yesterday: ${inr(orders.sales)} from ${orders.orders} orders, ${inr(orders.aov)} each on average. ${marginSay} ${quality.complaints} complaints and ${quality.returns} returns this week${quality.worse ? `, up from ${quality.prev_total}` : ""}. ${inr(due)} is overdue from ${b.overdue.length} customers. ${b.low_stock.length} items are low. You have ${b.meetings_today.length} meetings today.`,
+        sales: orders.sales, pace, orders, margin, quality, cash_in: b.cash_in, cash_out: b.cash_out, overdue: b.overdue, due,
         low_stock: b.low_stock, quiet: b.quiet_deals, meetings: b.meetings_today, refunds: b.refunds_today, steps,
       };
     },
