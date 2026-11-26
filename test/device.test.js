@@ -189,3 +189,23 @@ test("email: drafts never send, sends ask first, addresses can't smuggle headers
   assert.equal((await call("send_email", { to: "Bob <b@x.com>", text: "x" }, { origin: "you" })).level, "need");       // not a plain address
   rt.google = null;
 });
+
+test("open_app: the installed app on the device first, then the website, otherwise it says it couldn't find it", async () => {
+  fresh();
+  rt.state.scan = { apps: classifyAll([{ id: "com.google.Chrome", name: "Google Chrome" }, { id: "com.microsoft.VSCode", name: "Visual Studio Code" }, { id: "com.phonepe.app", name: "PhonePe" }], "macos") };
+  const dev = await deviceFor((await pairDevice({ platform: "macos" })).token);
+  const ops = [];
+  const stop = pretendDevice(dev, op => { ops.push(op); return { ok: true, data: {} }; });
+  try {
+    const chrome = await call("open_app", { app: "chrome" }, { origin: "voice" });
+    assert.equal(chrome.ok, true); assert.equal(chrome.open, undefined);
+    assert.deepEqual(ops.map(o => [o.op, o.args.id]), [["open_app", "com.google.chrome"]]);
+    assert.equal((await call("open_app", { app: "vscode" }, { origin: "voice" })).ok, true);
+    const insta = await call("open_app", { app: "Instagram" }, { origin: "voice" });
+    assert.equal(insta.ok, true); assert.equal(insta.open, "https://www.instagram.com");
+    const nope = await call("open_app", { app: "zzqx" }, { origin: "voice" });
+    assert.equal(nope.ok, false); assert.match(nope.say, /couldn't find "zzqx"/);
+    assert.equal((await call("open_app", { app: "phonepe" }, { origin: "voice" })).ok, false);   // locked: never opened
+    assert.equal(ops.length, 2);
+  } finally { stop(); }
+});

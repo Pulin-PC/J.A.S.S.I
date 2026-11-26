@@ -43,8 +43,8 @@ test("'send <text> to <contact>' finds the contact at the end", () => {
   assert.deepEqual(kinds("send hi to bob"), ["unknown"]);   // not a contact: never a made-up recipient
 });
 
-test("an app I don't know goes to the brain, never a guessed action", () => {
-  assert.deepEqual(kinds("open spotfy"), ["unknown"]);
+test("any app name becomes open_app; the server looks it up instead of guessing", () => {
+  assert.deepEqual(kinds("open spotfy"), ["open_app"]);   // the server finds it on your device or says it can't: no guess
   assert.deepEqual(kinds("open notion and type meeting notes"), ["open_app", "ask"]);
 });
 

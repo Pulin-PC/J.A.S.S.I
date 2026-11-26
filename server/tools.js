@@ -4,7 +4,7 @@
 import { decide, looksLikeInjection } from "./guard.js";
 import { rt, hhmm } from "./runtime.js";
 import { businessMetrics } from "./metrics.js";
-import { SITES } from "../public/reflex.js";
+import { SITES, APP_ALIAS } from "../public/reflex.js";
 import { deviceOp, deviceSay, SESSION_MS } from "./device.js";
 import { lockedReason } from "./catalog.js";
 import { isEmail } from "./mime.js";
@@ -54,9 +54,14 @@ const cut = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 const scanned = () => rt.state.scan?.apps || [];
 const screenOn = id => !!rt.state.settings?.screenApps?.[id];
 function findScreenApp(q) {
-  const n = String(q || "").toLowerCase().trim();
-  return scanned().find(a => a.id === n || a.name.toLowerCase() === n) || scanned().find(a => n.length >= 3 && a.name.toLowerCase().startsWith(n));
+  const n0 = String(q || "").toLowerCase().trim().replace(/\s+app$/, ""), n = APP_ALIAS[n0] || n0, lc = a => a.name.toLowerCase();
+  if (!n) return null;
+  return scanned().find(a => a.id === n || lc(a) === n)
+    || scanned().find(a => n.length >= 3 && lc(a).startsWith(n))
+    || scanned().find(a => n.length >= 3 && lc(a).split(/[\s.]+/).includes(n))           // "chrome" → Google Chrome
+    || scanned().find(a => n.length >= 4 && lc(a).replace(/\s+/g, "").includes(n.replace(/\s+/g, "")));   // "whatsappdesktop" → WhatsApp Desktop
 }
+const siteFor = t => SITES[t] || (/^[\w-]+\.(com|in|org|io|dev|ai|net|co|app|me|tv)(\/\S*)?$/.test(t) ? "https://" + t : null);
 // Facts for the guard about one screen step. They come from the device's last report, never from the AI's words.
 function screenFacts(a, target) {
   const hub = rt.deviceHub, last = hub?.last;
@@ -260,13 +265,24 @@ export const TOOLS = [
   },
   {
     name: "open_app", kind: "link", app: "browser",
-    description: "Open an app or website. Money, ID and password apps are blocked.",
+    description: "Open an app or website, the way a person would: the real app if it's installed on the user's device, otherwise the website in their browser. Always use this to open things (never a connection). Money, ID and password apps are blocked.",
     inputSchema: S({ app: str("app or site name") }, ["app"]),
     title: a => `Open ${a.app}`,
-    check: a => { const t = String(a.app).toLowerCase(); if (rt.demo.blocked_apps.includes(t)) return; need(SITES[t] || /^[\w-]+\.(com|in|org|io|dev|ai|net|co)(\/\S*)?$/.test(t), `I don't have a plug for "${a.app}" yet.`); },
-    run(a) {
-      const t = String(a.app).toLowerCase();
-      return { say: `Opening ${a.app}.`, open: SITES[t] || "https://" + t };
+    check: a => {
+      const t = String(a.app).toLowerCase().trim();
+      if (rt.demo.blocked_apps.includes(t)) return;
+      need(findScreenApp(t) || siteFor(t), `I couldn't find "${a.app}" on your device or as a website.`);
+    },
+    async run(a) {
+      const t = String(a.app).toLowerCase().trim(), app = findScreenApp(t), url = siteFor(t);
+      if (app && lockedReason(app)) throw new Oops(deviceSay("blocked_app"));
+      if (app) {
+        try {
+          await onDevice("open_app", { id: app.id });
+          return { say: `Opening ${app.name}.`, app: { id: app.id, name: app.name } };
+        } catch (e) { if (!url) throw e; }      // device not reachable: the website still works
+      }
+      return { say: `Opening ${a.app}.`, open: url };
     },
   },
   {

@@ -31,10 +31,27 @@ export const SITES = {
   "prime video": "https://www.primevideo.com", telegram: "https://web.telegram.org", chatgpt: "https://chatgpt.com",
   uber: "https://m.uber.com", ola: "https://book.olacabs.com", "youtube music": "https://music.youtube.com",
   google: "https://www.google.com", notion: "https://www.notion.so", razorpay: "https://dashboard.razorpay.com",
+  instagram: "https://www.instagram.com", facebook: "https://www.facebook.com", twitter: "https://x.com", x: "https://x.com",
+  threads: "https://www.threads.net", pinterest: "https://www.pinterest.com", snapchat: "https://web.snapchat.com",
+  reddit: "https://www.reddit.com", quora: "https://www.quora.com", wikipedia: "https://en.wikipedia.org",
+  amazon: "https://www.amazon.in", flipkart: "https://www.flipkart.com", myntra: "https://www.myntra.com",
+  meesho: "https://www.meesho.com", blinkit: "https://blinkit.com", zepto: "https://www.zeptonow.com", bigbasket: "https://www.bigbasket.com",
+  claude: "https://claude.ai", gemini: "https://gemini.google.com", perplexity: "https://www.perplexity.ai",
+  outlook: "https://outlook.live.com", "google docs": "https://docs.google.com", docs: "https://docs.google.com",
+  "google sheets": "https://sheets.google.com", slides: "https://slides.google.com", "google photos": "https://photos.google.com",
+  photos: "https://photos.google.com", "google meet": "https://meet.google.com", meet: "https://meet.google.com",
+  zoom: "https://zoom.us", slack: "https://app.slack.com", discord: "https://discord.com/app", teams: "https://teams.microsoft.com",
+  figma: "https://www.figma.com", canva: "https://www.canva.com", trello: "https://trello.com", jira: "https://www.atlassian.com/software/jira",
+  linear: "https://linear.app", vercel: "https://vercel.com", stackoverflow: "https://stackoverflow.com", "stack overflow": "https://stackoverflow.com",
+  "jio cinema": "https://www.jiocinema.com", jiocinema: "https://www.jiocinema.com", sonyliv: "https://www.sonyliv.com",
+  "apple music": "https://music.apple.com", "amazon music": "https://music.amazon.in", gaana: "https://gaana.com", jiosaavn: "https://www.jiosaavn.com",
+  irctc: "https://www.irctc.co.in", makemytrip: "https://www.makemytrip.com", "book my show": "https://in.bookmyshow.com",
+  bookmyshow: "https://in.bookmyshow.com", rapido: "https://www.rapido.bike", news: "https://news.google.com", "google news": "https://news.google.com",
+  translate: "https://translate.google.com", "google translate": "https://translate.google.com", keep: "https://keep.google.com",
 };
 
 // Short names people say for an app.
-const APP_ALIAS = { yt: "youtube", "you tube": "youtube", "yt music": "youtube music", gmaps: "google maps", insta: "instagram", wa: "whatsapp" };
+export const APP_ALIAS = { vscode: "visual studio code", "vs code": "visual studio code", yt: "youtube", "you tube": "youtube", "yt music": "youtube music", gmaps: "google maps", insta: "instagram", wa: "whatsapp" };
 
 export const ENGINES = "google|youtube|amazon|flipkart|wikipedia|github|reddit|linkedin|spotify|maps|google maps|swiggy|zomato";
 
@@ -213,7 +230,8 @@ export class Parser {
       if (this.blocked.includes(t)) return S("open_app", { app: t });
       if (SITES[t]) return S("open_app", { app: t }, { early: !longer });
       if (/^[\w-]+\.(com|in|org|io|dev|ai|net|co)(\/\S*)?$/.test(t)) return S("open_app", { app: t });
-      return S("unknown", { text: c }, { free: true });   // not an app or site I know: the brain works it out, no guessing
+      // Not a site I know: the server looks for that app on your device (it never guesses: found, or it says so)
+      return S("open_app", { app: t }, { early: false, free: true });
     }
     return S("unknown", { text: c }, { free: true });
   }
