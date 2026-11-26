@@ -1,0 +1,32 @@
+[package]
+name = "jassi-desktop"
+version = "0.1.0"
+edition = "2021"
+description = "J.A.S.S.I for macOS and Windows: a thin shell around the web app (docs/native-contract.md)"
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "jassi"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+url = "2"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = "2"
+open = "5"
+# native-tls = the OS's own TLS (Secure Transport / SChannel): nothing to cross-compile for Windows.
+ureq = { version = "2", default-features = false, features = ["native-tls", "json"] }
+native-tls = "0.2"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true

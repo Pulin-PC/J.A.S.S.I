@@ -1,0 +1,18 @@
+/* The two native screens only: the start / "can't reach" screen and the "working" banner. */
+:root { --bg: #01060c; --c1: #46ecff; --line: rgba(70, 236, 255, .22); --text: #d9f7ff; --dim: #6fa3b5; --red: #ff4d63; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--text); font: 17px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-user-select: none; user-select: none; cursor: default; }
+button { font: inherit; font-weight: 600; cursor: pointer; border-radius: 999px; }
+[hidden] { display: none !important; }
+
+.start main { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 24px; }
+.start h1 { margin: 0; font-size: 24px; font-weight: 600; }
+.start p { margin: 0; color: var(--dim); }
+.start button { margin-top: 18px; padding: 10px 28px; color: var(--bg); background: var(--c1); border: 0; }
+
+.banner { display: flex; align-items: center; justify-content: center; gap: 14px; border: 1px solid var(--line); font-size: 14px; overflow: hidden; white-space: nowrap; }
+.banner .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c1); animation: pulse 1.2s ease-in-out infinite; }
+.banner button { padding: 4px 16px; color: #fff; background: var(--red); border: 0; font-size: 13px; }
+@keyframes pulse { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .banner .dot { animation: none; } }

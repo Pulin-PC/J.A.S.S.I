@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>J.A.S.S.I listens only while you are talking to it.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>J.A.S.S.I turns what you say into words.</string>
+</dict>
+</plist>
