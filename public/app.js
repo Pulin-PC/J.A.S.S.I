@@ -42,7 +42,8 @@ function hush() { try { window.speechSynthesis?.cancel(); } catch {} if (native)
 function speak(text) {
   if (!talkBack || !text) return;
   const clean = text.replace(/₹/g, "rupees ").replace(/J\.A\.S\.S\.I/g, "Jassi");
-  if (native) {   // WebViews have no reliable voice of their own
+  // The page's own voice (Daniel, en-GB) sounds natural on the desktop app too; phone WebViews have no reliable one.
+  if (native && !(voice && !/^(android|ios)$/.test(native.platform))) {
     hush(); native.speak({ text: clean, lang: "en-IN" }); setMode("speaking");
     speak.t = setTimeout(() => { if (document.body.classList.contains("speaking")) setMode("idle"); }, Math.min(15000, 600 + clean.length * 65));
     return;
@@ -221,13 +222,47 @@ function afterResult(r) {
   refresh();
 }
 
-function openLink(url, r) {
-  if (!LS.get("jassi.autoOpen") || LS.get("jassi.autoOpen") === "on") {
-    if (native) return void native.openExternal(new URL(url, location.href).href);
-    const w = window.open(url, "_blank", "noopener");
-    if (!w && !openLink.warned) { openLink.warned = true; toast("Pop-ups blocked", "Use the button on the action card, or allow pop-ups for this page."); }
+async function openLink(url, r, clicked) {
+  if (!clicked && LS.get("jassi.autoOpen") === "off") return;
+  const href = new URL(url, location.href).href;
+  const app = waApp(href);
+  if (native) {
+    if (app && (await native.openExternal(app))?.ok) return;   // shells that refuse app links fall back to wa.me (the phones hand it to the app)
+    return void native.openExternal(href);
   }
+  if (app) return tryApp(app, href);
+  const w = window.open(url, "_blank", "noopener");
+  if (!w && !openLink.warned) { openLink.warned = true; toast("Pop-ups blocked", "Use the button on the action card, or allow pop-ups for this page."); }
 }
+
+// WhatsApp opens in the installed app; the web version is only the fallback.
+function waApp(url) {
+  let u; try { u = new URL(url); } catch { return null; }
+  if (u.hostname === "web.whatsapp.com") return "whatsapp://";
+  if (!/^(wa\.me|api\.whatsapp\.com)$/.test(u.hostname)) return null;
+  const phone = (u.searchParams.get("phone") || u.pathname).replace(/\D/g, ""), text = u.searchParams.get("text") || "";
+  return "whatsapp://send?" + [phone && "phone=" + phone, text && "text=" + encodeURIComponent(text)].filter(Boolean).join("&");
+}
+// If the page still has focus 2 s later, the app didn't open: offer a tap (browsers may want one), then the web.
+function tryApp(app, web, again) {
+  let left = false;
+  const gone = () => { left = true; };
+  window.addEventListener("blur", gone, { once: true });
+  document.addEventListener("visibilitychange", gone, { once: true });
+  location.href = app;
+  setTimeout(() => {
+    window.removeEventListener("blur", gone); document.removeEventListener("visibilitychange", gone);
+    if (left) return;
+    if (!again) toast("Open WhatsApp", "Tap to open the chat in the WhatsApp app.", "", { label: "Open WhatsApp", fn: () => tryApp(app, web, true) });
+    else toast("WhatsApp app not found", "Use WhatsApp on the web instead.", "", { label: "Open on the web", fn: () => window.open(web, "_blank", "noopener") });
+  }, 2000);
+}
+document.addEventListener("click", e => {
+  const a = e.target.closest?.("a.open");
+  if (!a || !waApp(a.href)) return;
+  e.preventDefault();
+  openLink(a.href, null, true);
+});
 
 // ================================================================ action feed (fed by the live event stream too)
 const cards = new Map();
