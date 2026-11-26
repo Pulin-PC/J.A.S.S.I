@@ -39,6 +39,8 @@ dependencies {
     implementation("androidx.webkit:webkit:1.14.0")
     implementation("androidx.browser:browser:1.9.0")
     implementation("androidx.biometric:biometric:1.1.0")
+    // biometric pulls in a very old fragment library that breaks permission prompts; use a current one
+    implementation("androidx.fragment:fragment:1.8.9")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
 }

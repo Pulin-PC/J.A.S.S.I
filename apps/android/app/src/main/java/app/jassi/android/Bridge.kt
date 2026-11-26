@@ -2,12 +2,14 @@ package app.jassi.android
 
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.webkit.WebView
 import androidx.webkit.JavaScriptReplyProxy
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import org.json.JSONException
 import org.json.JSONObject
+import java.util.concurrent.Executors
 
 typealias Reply = (JSONObject) -> Unit
 
@@ -23,6 +25,7 @@ class Bridge(private val activity: MainActivity, private val web: WebView) {
     private val jassiOrigin = Origins.of(BuildConfig.JASSI_URL)!!
     private var page: JavaScriptReplyProxy? = null
     private val waiting = ArrayDeque<JSONObject>()
+    private val worker = Executors.newSingleThreadExecutor()
 
     fun install(): Boolean {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) ||
@@ -66,7 +69,8 @@ class Bridge(private val activity: MainActivity, private val web: WebView) {
         }
         try {
             call(msg.optString("method"), msg.opt("args"), done)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) Log.w("jassi", "bridge call failed", e)
             done(fail("failed"))
         }
     }
@@ -82,7 +86,32 @@ class Bridge(private val activity: MainActivity, private val web: WebView) {
                 val url = (args as? String) ?: o.optString("url")
                 done(if (External.open(activity, url)) ok() else fail("bad_url"))
             }
+            "listApps" -> worker.execute { done(Apps.json(activity)) }
+            "permissions" -> done(Perms.snapshot(activity))
+            "openPermission" -> done(activity.openPermission((args as? String) ?: o.optString("kind")))
+            "pair" -> worker.execute { done(pair(o)) }
+            "unpair" -> worker.execute {
+                Vault.clear(activity)
+                done(ok())
+            }
+            "setPolicy" -> {
+                val ids = o.optJSONArray("blockedApps")
+                Vault.setBlockedApps(activity, List(ids?.length() ?: 0) { ids!!.optString(it) })
+                done(ok())
+            }
+            "notify" -> done(Notify.show(activity, o.optString("title"), o.optString("body")))
+            "stop" -> done(ok())
             else -> done(fail("unsupported"))
         }
+    }
+
+    private fun pair(o: JSONObject): JSONObject {
+        val server = o.optString("server")
+        val deviceId = o.optString("deviceId")
+        val token = o.optString("token")
+        if (deviceId.isBlank() || token.isBlank()) return fail("bad_request")
+        if (!Origins.serverAllowed(server, BuildConfig.JASSI_URL, BuildConfig.DEBUG)) return fail("bad_server")
+        Vault.save(activity, Vault.Pairing(Origins.of(server)!!, deviceId, token))
+        return ok()
     }
 }

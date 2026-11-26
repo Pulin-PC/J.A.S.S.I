@@ -4,7 +4,10 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -44,6 +47,18 @@ class MainActivity : FragmentActivity() {
     private val askMic = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         webMicRequest?.let { if (granted) it.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) else it.deny() }
         webMicRequest = null
+        checkPermissions()
+    }
+    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { checkPermissions() }
+
+    // While the app is in front, look once a second so setup moves on by itself (contract §2, "permission").
+    private val ticker = Handler(Looper.getMainLooper())
+    private var lastPermissions: String? = null
+    private val tick = object : Runnable {
+        override fun run() {
+            checkPermissions()
+            ticker.postDelayed(this, 1000)
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -109,6 +124,51 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIntent(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        ticker.removeCallbacks(tick)
+        tick.run()
+    }
+
+    override fun onPause() {
+        ticker.removeCallbacks(tick)
+        super.onPause()
+    }
+
+    private fun checkPermissions() {
+        val now = Perms.snapshot(this)
+        val text = now.toString()
+        if (lastPermissions != null && lastPermissions != text) {
+            bridge.event(JSONObject().put("type", "permission").put("permissions", now))
+        }
+        lastPermissions = text
+    }
+
+    /** Shows the system prompt, or the settings page when Android will not prompt any more. */
+    fun openPermission(kind: String): JSONObject {
+        when (kind) {
+            "screen" -> if (!Perms.openScreenSettings(this)) return fail("failed")
+            "mic", "speech" -> when {
+                kind == "speech" && Perms.snapshot(this).optString("speech") == "unsupported" -> return fail("unsupported")
+                Perms.mic(this) == "denied" -> Perms.openAppSettings(this)
+                else -> requestMic()
+            }
+            "notifications" -> if (Build.VERSION.SDK_INT < 33 || Perms.notifications(this) == "denied") {
+                Perms.openNotificationSettings(this)
+            } else {
+                Perms.markAsked(this, "asked_notifications")
+                askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            else -> return fail("unsupported")
+        }
+        return ok()
+    }
+
+    private fun requestMic() {
+        Perms.markAsked(this, "asked_mic")
+        askMic.launch(Manifest.permission.RECORD_AUDIO)
     }
 
     override fun onDestroy() {
@@ -202,7 +262,7 @@ class MainActivity : FragmentActivity() {
             } else {
                 webMicRequest?.deny()
                 webMicRequest = request
-                askMic.launch(Manifest.permission.RECORD_AUDIO)
+                requestMic()
             }
         }
 
