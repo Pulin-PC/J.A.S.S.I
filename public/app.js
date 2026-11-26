@@ -279,33 +279,6 @@ function onAction(e) {
   }
 }
 
-// ================================================================ Code Mode panel
-let codeLines = [];
-function onCode(e) {
-  const panel = $("#panel-code");
-  if (e.phase === "start") {
-    panel.classList.add("live");
-    $("#code-meta").textContent = "running…";
-    codeLines = e.code.split("\n");
-    $("#code").innerHTML = codeLines.map((l, i) => `<span class="ln" data-n="${i}">${hl(l)}</span>`).join("");
-    codeLines.callLines = codeLines.map((l, i) => /await tools\./.test(l) ? i : -1).filter(i => i >= 0);
-    const first = $("#code").querySelector(`[data-n="${codeLines.callLines[0]}"]`); first?.classList.add("hot");
-  } else if (e.phase === "call") {
-    const n = codeLines.callLines?.[e.index];
-    const el = $("#code").querySelector(`[data-n="${n}"]`);
-    if (el) { el.classList.remove("hot"); el.classList.add(e.ok ? "done" : "bad"); }
-    const next = $("#code").querySelector(`[data-n="${codeLines.callLines?.[e.index + 1]}"]`); next?.classList.add("hot");
-  } else if (e.phase === "end") {
-    panel.classList.remove("live");
-    $("#code-meta").textContent = `${e.calls} calls · 1 script · ${e.ms} ms`;
-    $("#code").insertAdjacentHTML("beforeend", `<span class="code-sum">${e.ok ? "✓" : "!"} ${e.calls} app actions in one go: no extra AI round trips.</span>`);
-  }
-}
-function hl(l) {
-  return esc(l).replace(/\b(const|await|return|if)\b/g, '<span class="c-k">$1</span>').replace(/(tools\.)(\w+)/g, '$1<span class="c-f">$2</span>')
-    .replace(/(&quot;[^&]*?&quot;|`[^`]*`)/g, '<span class="c-s">$1</span>');
-}
-
 // ================================================================ approvals
 let pendingOk = null;
 function showOk(a) {
@@ -529,6 +502,28 @@ $("#btn-attack").onclick = async () => {
   refresh();
 };
 
+// ================================================================ left tabs: your apps, schedule, diary
+const TABS = ["apps", "schedule", "diary"];
+function showTab(name, focus = false) {
+  if (!TABS.includes(name)) name = "apps";
+  for (const t of TABS) {
+    const btn = $("#tab-btn-" + t), on = t === name;
+    btn.classList.toggle("on", on);
+    btn.setAttribute("aria-selected", on);
+    btn.tabIndex = on ? 0 : -1;
+    $("#tab-" + t).hidden = !on;
+  }
+  if (focus) $("#tab-btn-" + name).focus();
+  LS.set("jassi.tab", name);
+}
+$(".ltabs").onclick = e => { const b = e.target.closest(".ltab"); if (b) showTab(b.dataset.tab); };
+$(".ltabs").onkeydown = e => {
+  const i = TABS.indexOf(LS.get("jassi.tab") || "apps");
+  if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); showTab(TABS[(i + (e.key === "ArrowRight" ? 1 : TABS.length - 1)) % TABS.length], true); }
+};
+showTab(LS.get("jassi.tab") || "apps");
+const setCount = (id, n) => { $(id).textContent = n ? n : ""; };
+
 // ================================================================ panels from server state
 function renderApps() {
   const on = S.settings?.apps || {};
@@ -558,11 +553,13 @@ function renderUpcoming() {
     ...timers.filter(t => t.fireAt > Date.now()).map(t => ({ t: t.fireAt, label: "⏱ " + t.label, live: true })),
     ...S.events.map(e => ({ t: e.when, label: "📅 " + e.title, ics: `/api/ics/${e.id}` })),
   ].sort((a, b) => a.t - b.t).slice(0, 6);
+  setCount("#count-schedule", items.length);
   $("#upcoming").innerHTML = items.length ? items.map(x => `<li><span>${esc(x.label)}${x.ics ? ` <a href="${x.ics}" title="Add to my calendar">.ics</a>` : ""}</span><span class="t">${x.live ? countdown(x.t) : hhmm(x.t)}</span></li>`).join("") : `<li class="empty">Nothing yet</li>`;
 }
 const countdown = t => { const s = Math.max(0, Math.round((t - Date.now()) / 1000)); return s >= 3600 ? hhmm(t) : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 function renderDiary() {
   $("#diary-path").textContent = S.diaryDir;
+  setCount("#count-diary", S.diary.length);
   $("#diary").innerHTML = S.diary.length ? S.diary.map(d => `<li><span class="t">${esc(d.time)}</span><span>${esc(d.title)}<div class="d">${esc(d.decision)} · ${esc(d.origin)}</div></span></li>`).join("") : `<li class="empty">Every action I take is written here.</li>`;
 }
 function updateStats() {
@@ -603,7 +600,6 @@ function connect() {
   const es = new EventSource("/api/events");
   es.addEventListener("hello", () => $("#pill-live").classList.add("on"));
   es.addEventListener("action", e => onAction(JSON.parse(e.data)));
-  es.addEventListener("codemode", e => onCode(JSON.parse(e.data)));
   es.addEventListener("approval", e => showOk(JSON.parse(e.data)));
   es.addEventListener("approval_done", e => { const d = JSON.parse(e.data); if (pendingOk?.id === d.id) hideOk(); });
   es.addEventListener("diary", e => { const d = JSON.parse(e.data); S.diary.unshift(d); renderDiary(); });
