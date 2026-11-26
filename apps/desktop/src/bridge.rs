@@ -1,8 +1,10 @@
 //! The native half of `window.jassiNative` (docs/native-contract.md §2).
 //! Every command answers with JSON and never throws: not possible here → `{ ok: false, error: "unsupported" }`.
 
+use crate::policy::Policy;
 use crate::shell::{self, Shell};
-use crate::{config, policy};
+use crate::store::{self, Pairing};
+use crate::{config, platform, policy};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tauri::{AppHandle, State, Webview};
@@ -84,32 +86,130 @@ pub fn jn_open_external(webview: Webview, shell: State<Shell>, args: UrlArgs) ->
     }
 }
 
-// The rest arrive in the next steps. Until then they exist and answer "unsupported", as the contract asks.
+#[tauri::command(async)]
+pub fn jn_list_apps(webview: Webview, shell: State<Shell>) -> Value {
+    if !shell.allows(&webview) {
+        return fail("not_allowed");
+    }
+    json!({ "ok": true, "apps": platform::list_apps(), "partial": false })
+}
 
-#[tauri::command]
-pub fn jn_list_apps() -> Value {
-    unsupported()
+#[tauri::command(async)]
+pub fn jn_permissions(webview: Webview, shell: State<Shell>) -> Value {
+    if !shell.allows(&webview) {
+        return fail("not_allowed");
+    }
+    json!(platform::permissions())
 }
-#[tauri::command]
-pub fn jn_permissions() -> Value {
-    json!({ "screen": "unsupported", "mic": "unsupported", "speech": "unsupported", "notifications": "unsupported" })
+
+#[derive(Deserialize)]
+pub struct KindArgs {
+    kind: String,
 }
-#[tauri::command]
-pub fn jn_open_permission() -> Value {
-    unsupported()
+
+#[tauri::command(async)]
+pub fn jn_open_permission(webview: Webview, shell: State<Shell>, args: KindArgs) -> Value {
+    if !shell.allows(&webview) {
+        return fail("not_allowed");
+    }
+    if platform::open_permission(&args.kind) {
+        ok()
+    } else {
+        unsupported()
+    }
 }
-#[tauri::command]
-pub fn jn_pair() -> Value {
-    unsupported()
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PairArgs {
+    server: String,
+    device_id: String,
+    token: String,
 }
-#[tauri::command]
-pub fn jn_unpair() -> Value {
-    unsupported()
+
+/// Saves the token in OS secure storage and starts the device channel.
+#[tauri::command(async)]
+pub fn jn_pair(app: AppHandle, webview: Webview, shell: State<Shell>, args: PairArgs) -> Value {
+    if !shell.allows(&webview) {
+        return fail("not_allowed");
+    }
+    let server = match policy::check_server(&args.server, config::DEV) {
+        Ok(server) => server,
+        Err(why) => return fail(why),
+    };
+    if !policy::token_ok(&args.device_id) || !policy::token_ok(&args.token) {
+        return fail("bad_args");
+    }
+    let pairing = Pairing { server, device_id: args.device_id, token: args.token };
+    if !store::save_pairing(&pairing) {
+        return fail("storage");
+    }
+    shell::resume(&app, pairing);
+    ok()
 }
-#[tauri::command]
-pub fn jn_set_policy() -> Value {
-    unsupported()
+
+/// Forgets the token and stops the channel.
+#[tauri::command(async)]
+pub fn jn_unpair(app: AppHandle, webview: Webview, shell: State<Shell>) -> Value {
+    if !shell.allows(&webview) {
+        return fail("not_allowed");
+    }
+    shell::forget(&app);
+    ok()
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicyArgs {
+    blocked_apps: Vec<String>,
+}
+
+#[tauri::command(async)]
+pub fn jn_set_policy(app: AppHandle, webview: Webview, shell: State<Shell>, args: PolicyArgs) -> Value {
+    if !shell.allows(&webview) {
+        return fail("not_allowed");
+    }
+    if args.blocked_apps.len() > 5000 || args.blocked_apps.iter().any(|id| id.len() > 300) {
+        return fail("bad_args");
+    }
+    let policy = Policy::new(args.blocked_apps);
+    let saved = store::save_blocked(&app, &policy.ids());
+    *shell.policy.write().unwrap() = policy; // in force at once, even if the file could not be written
+    if saved {
+        ok()
+    } else {
+        fail("storage")
+    }
+}
+
+#[derive(Deserialize)]
+pub struct NotifyArgs {
+    title: String,
+    body: String,
+}
+
+#[tauri::command(async)]
+pub fn jn_notify(webview: Webview, shell: State<Shell>, args: NotifyArgs) -> Value {
+    if !shell.allows(&webview) {
+        return fail("not_allowed");
+    }
+    match platform::notify(&policy::cut(&args.title, 120), &policy::cut(&args.body, 500)) {
+        Ok(()) => ok(),
+        Err(why) => fail(why),
+    }
+}
+
+/// Abort any running screen action now.
+#[tauri::command]
+pub fn jn_stop(webview: Webview, shell: State<Shell>) -> Value {
+    if !shell.allows(&webview) {
+        return fail("not_allowed");
+    }
+    ok()
+}
+
+// These arrive in the next step. Until then they exist and answer "unsupported", as the contract asks.
+
 #[tauri::command]
 pub fn jn_biometric() -> Value {
     unsupported()
@@ -129,12 +229,4 @@ pub fn jn_speak() -> Value {
 #[tauri::command]
 pub fn jn_speak_stop() -> Value {
     unsupported()
-}
-#[tauri::command]
-pub fn jn_notify() -> Value {
-    unsupported()
-}
-#[tauri::command]
-pub fn jn_stop() -> Value {
-    ok()
 }

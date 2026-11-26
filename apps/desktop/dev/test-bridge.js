@@ -1,7 +1,6 @@
 // Dev builds only. Run inside the loaded page with:
 //   JASSI_DEV_SCRIPT=apps/desktop/dev/test-bridge.js <the dev binary>
 // Calls every bridge method once and prints each answer on the shell's stdout as "[dev] …".
-// Set window.__jassiDevPair = { server, deviceId, token } first (see test-pair.js) to also pair.
 (async () => {
   const n = window.jassiNative;
   const say = (label, value) => window.__TAURI_INTERNALS__.invoke("jn_dev_log", { args: { text: label + " " + JSON.stringify(value) } });
@@ -20,9 +19,9 @@
   await say("speakStop", await n.speakStop());
   await say("listenStop", await n.listenStop());
   await say("stop", await n.stop());
-  await say("unpair", await n.unpair());
-  const p = window.__jassiDevPair;
-  if (p) await say("pair", await n.pair(p));
+  await say("openPermission(unknown kind)", await n.openPermission("bogus"));
+  await say("pair(localhost stub)", await n.pair({ server: "http://localhost:8799", deviceId: "dev-mac", token: "dev-token" }));
   await say("pair(plain http, not localhost)", await n.pair({ server: "http://example.com", deviceId: "x", token: "x" }));
+  await say("unpair", await n.unpair());
   await say("done", true);
 })();

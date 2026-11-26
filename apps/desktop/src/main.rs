@@ -4,8 +4,10 @@
 mod bridge;
 mod config;
 mod http;
+mod platform;
 mod policy;
 mod shell;
+mod store;
 
 use tauri::{Manager, WindowEvent};
 

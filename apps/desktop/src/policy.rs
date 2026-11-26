@@ -413,6 +413,11 @@ pub fn auth_link(link: &str) -> Option<String> {
     }
 }
 
+/// Pairing tokens and device ids travel in an HTTP header: plain visible characters only.
+pub fn token_ok(s: &str) -> bool {
+    !s.is_empty() && s.len() <= 4096 && s.bytes().all(|b| b.is_ascii_graphic())
+}
+
 /// App ids are passed to the OS to open an app: keep them to plain id characters.
 pub fn app_id_ok(id: &str) -> bool {
     !id.is_empty()
@@ -602,6 +607,15 @@ mod tests {
         assert_eq!(auth_link("jassi://other?code=abc"), None);
         assert_eq!(auth_link("https://auth?code=abc"), None);
         assert_eq!(auth_link(&format!("jassi://auth?code={}", "x".repeat(3000))), None);
+    }
+
+    #[test]
+    fn tokens_are_plain_visible_text() {
+        assert!(token_ok("eyJhbGciOi.J9-_~+/="));
+        assert!(!token_ok(""));
+        assert!(!token_ok("abc def"));
+        assert!(!token_ok("abc\r\nX-Evil: 1"));
+        assert!(!token_ok(&"x".repeat(5000)));
     }
 
     #[test]

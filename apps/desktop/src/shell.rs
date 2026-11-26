@@ -1,9 +1,10 @@
 //! The shell itself: one window that shows the web app, the rule for which links stay inside,
 //! events to the web app, and `jassi://` links (docs/native-contract.md §1-§3).
 
-use crate::{config, policy};
+use crate::policy::Policy;
+use crate::{config, platform, policy, store};
 use serde_json::{json, Value};
-use std::sync::Mutex;
+use std::sync::{Mutex, RwLock};
 use std::time::{Duration, Instant};
 use tauri::ipc::CapabilityBuilder;
 use tauri::{AppHandle, Manager, Url, WebviewUrl, WebviewWindowBuilder};
@@ -44,11 +45,22 @@ pub struct Shell {
     start_url: Mutex<Option<Url>>,
     page: Mutex<Page>,
     last_link: Mutex<Option<(String, Instant)>>,
+    /// Apps that are never read or acted in (`setPolicy`). Also saved in the app's data folder.
+    pub policy: RwLock<Policy>,
+    /// Paired with a server (the token itself stays in the Keychain / Credential Manager).
+    pub paired: Mutex<bool>,
 }
 
 impl Shell {
     pub fn new(jassi: Url) -> Self {
-        Shell { jassi, start_url: Mutex::new(None), page: Mutex::new(Page::default()), last_link: Mutex::new(None) }
+        Shell {
+            jassi,
+            start_url: Mutex::new(None),
+            page: Mutex::new(Page::default()),
+            last_link: Mutex::new(None),
+            policy: RwLock::new(Policy::default()),
+            paired: Mutex::new(false),
+        }
     }
 
     /// Contract §1.3: the bridge answers only the main window while it shows a J.A.S.S.I page.
@@ -101,7 +113,49 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(all(windows, debug_assertions))]
     let _ = app.deep_link().register_all(); // dev builds have no installer to register jassi://
 
+    *app.state::<Shell>().policy.write().unwrap() = Policy::new(store::load_blocked(&handle));
+    // The Keychain may ask the user before it hands the token over, so never wait for it on the main thread.
+    let restore = handle.clone();
+    std::thread::spawn(move || {
+        if let Some(pairing) = store::load_pairing() {
+            resume(&restore, pairing);
+        }
+    });
+    watch_permissions(handle);
+
     Ok(())
+}
+
+/// Paired (now, or at an earlier launch).
+pub fn resume(app: &AppHandle, _pairing: store::Pairing) {
+    *app.state::<Shell>().paired.lock().unwrap() = true;
+}
+
+/// Unpair: forget the token.
+pub fn forget(app: &AppHandle) {
+    store::forget_pairing();
+    *app.state::<Shell>().paired.lock().unwrap() = false;
+}
+
+/// Contract §2: tell the web app when a permission changes, so setup moves on by itself.
+/// Checked once a second while a J.A.S.S.I page is listening.
+fn watch_permissions(app: AppHandle) {
+    std::thread::spawn(move || {
+        let mut last = None;
+        loop {
+            std::thread::sleep(Duration::from_secs(1));
+            if !app.state::<Shell>().page.lock().unwrap().loaded {
+                continue;
+            }
+            let now = platform::permissions();
+            if last.as_ref() != Some(&now) {
+                if last.is_some() {
+                    emit(&app, json!({ "type": "permission", "permissions": now }));
+                }
+                last = Some(now);
+            }
+        }
+    });
 }
 
 fn is_start_page(url: &Url) -> bool {
