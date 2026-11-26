@@ -145,7 +145,7 @@ export const TOOLS = [
     inputSchema: S({ to: str("contact name"), text: str("the message") }, ["to", "text"]),
     title: a => `WhatsApp ${a.to}`,
     prep(a) { if (DEP.test(a.text || "") && lastEta()) a.text = `Hey! My food arrives at ${hhmm(lastEta())}.`; },
-    check(a) { need(findContact(a.to), `I don't know "${a.to}" yet. Add them to data/rt.demo.json.`); need(a.text, "What should I say?"); },
+    check(a) { need(findContact(a.to), `"${a.to}" isn't in your contacts, so I didn't send anything.`); need(a.text, "What should I say?"); },
     run(a) {
       const c = findContact(a.to);
       const link = `https://wa.me/${c.phone}?text=${encodeURIComponent(a.text)}`;

@@ -222,14 +222,23 @@ export class Parser {
     // "<name> [on whatsapp] [saying|that|:] <text>"  or  "<name> <text>"
     let r = rest.replace(/^(?:it|this|that)\s+to\s+/i, "").replace(/^to\s+/i, "");
     const lr = r.toLowerCase();
-    let name = null, text = "";
+    let name = null, text = "", known = false;
     for (const [n, canon] of this.contacts) {
-      if (lr === n || lr.startsWith(n + " ") || lr.startsWith(n + ",")) { name = canon; text = r.slice(n.length); break; }
+      if (lr === n || lr.startsWith(n + " ") || lr.startsWith(n + ",")) { name = canon; known = true; text = r.slice(n.length); break; }
+    }
+    // "<text> to <contact>": send "hi" to mom, send a message saying hi to Riya on WhatsApp
+    if (!name) for (const [n, canon] of this.contacts) {
+      const m = r.match(new RegExp(`^(.+?)\\s+to\\s+${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s+on\\s+whatsapp)?[.!]?$`, "i"));
+      if (m) { name = canon; known = true; text = m[1].replace(/^(?:an?\s+)?(?:whatsapp\s+)?(?:message|text|msg)\b\s*/i, ""); break; }
     }
     if (!name) {
       const m = r.match(/^(.+?)(?:\s+on\s+whatsapp)?(?:\s*[,:]\s*|\s+(?:saying|that says|that|to say|and say)\s+)(.+)$/i);
       if (m) { name = stripText(m[1]); text = m[2]; } else { name = r.split(/\s+/)[0]; text = r.slice(name.length); }
     }
+    // Not someone in your contacts: the brain says so (or finds who you mean). Never a message to a made-up name.
+    const ln = name.toLowerCase();
+    if (!known && this.contacts.length && !this.contacts.some(([n]) => n === ln || (ln.length >= 3 && n.startsWith(ln))))
+      return [new Step("unknown", { text: c }, { clause: c, free: true })];
     text = text.replace(/^\s*(?:on\s+whatsapp)?\s*(?:[,:]|saying|that says|that|to say|and say)?\s*/i, "");
     const dep = DEP.test(text);
     return [new Step("message", { to: name, text: stripText(text) }, { clause: c, free: true, dep, early: !dep })];
