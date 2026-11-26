@@ -26,6 +26,7 @@ http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   if (url.pathname === "/") { res.writeHead(200, { "content-type": "text/html; charset=utf-8" }); return res.end(PAGE); }
   if (url.pathname === "/frame") { res.writeHead(200, { "content-type": "text/html" }); return res.end(FRAME); }
+  if (url.pathname === "/frame-mic") { res.writeHead(200, { "content-type": "text/html" }); return res.end(FRAME_MIC); }
 
   if (url.pathname === "/api/device/next") {
     if (revoke || !authed(req)) { revoke = false; note("poll → 401"); return json(res, 401, { error: "unauthorized" }); }
@@ -65,6 +66,13 @@ const FRAME = `<!doctype html><script>
 parent.postMessage({ frame: { jassiNative: typeof window.jassiNative, host: typeof window.__jassiHost } }, "*");
 </script>`;
 
+// Loaded from 127.0.0.1 (another origin than localhost): asks for the microphone and must be refused.
+const FRAME_MIC = `<!doctype html><script>
+navigator.mediaDevices.getUserMedia({ audio: true }).then(
+  (s) => { s.getTracks().forEach((t) => t.stop()); return "allowed"; }, (e) => e.name
+).then((mic) => parent.postMessage({ otherSite: { mic } }, "*"));
+</script>`;
+
 const PAGE = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>J.A.S.S.I bridge test</title>
 <style>body{font:14px system-ui;background:#01060c;color:#e8f4fa;margin:12px}button{margin:3px;padding:8px 10px;font-size:13px}
@@ -75,13 +83,17 @@ input{width:95%;padding:8px;margin:6px 0}a{color:#3ce8ff}</style>
 <input id="box" placeholder="Type here"><input id="secret" type="password" placeholder="Password">
 <p><a href="https://example.com/">A link to another site</a></p>
 <iframe src="/frame" style="display:none"></iframe>
+<iframe src="http://127.0.0.1:${PORT}/frame-mic" allow="microphone" style="display:none"></iframe>
 <pre id="out"></pre>
 <script>
 const out = document.getElementById("out");
-window.__events = []; window.__frame = null;
+window.__events = []; window.__frame = null; window.__otherSite = null;
 const show = (label, value) => { out.textContent = label + " → " + JSON.stringify(value) + "\\n" + out.textContent; };
 addEventListener("jassi-native", (e) => { window.__events.push(e.detail); show("event", e.detail); });
-addEventListener("message", (e) => { if (e.data && e.data.frame) { window.__frame = e.data.frame; show("iframe sees", e.data.frame); } });
+addEventListener("message", (e) => {
+  if (e.data && e.data.frame) { window.__frame = e.data.frame; show("iframe sees", e.data.frame); }
+  if (e.data && e.data.otherSite) { window.__otherSite = e.data.otherSite; show("another site in a frame", e.data.otherSite); }
+});
 const n = window.jassiNative;
 const calls = {
   listApps: () => n.listApps().then((r) => ({ ok: r.ok, partial: r.partial, count: r.apps && r.apps.length, first: r.apps && r.apps.slice(0, 3) })),
@@ -101,6 +113,7 @@ const calls = {
   speakStop: () => n.speakStop(),
   notify: () => n.notify({ title: "J.A.S.S.I", body: "This is a test alert." }),
   stop: () => n.stop(),
+  "page microphone": () => navigator.mediaDevices.getUserMedia({ audio: true }).then((s) => { s.getTracks().forEach((t) => t.stop()); return "allowed"; }, (e) => e.name),
 };
 if (!n) show("window.jassiNative", "missing");
 else {
