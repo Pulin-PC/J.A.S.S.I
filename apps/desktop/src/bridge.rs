@@ -18,6 +18,12 @@ fn fail(error: &str) -> Value {
 fn unsupported() -> Value {
     fail("unsupported")
 }
+fn result(r: Result<(), &'static str>) -> Value {
+    match r {
+        Ok(()) => ok(),
+        Err(why) => fail(why),
+    }
+}
 
 // ---------------------------------------------------------------- the two bundled screens
 
@@ -197,10 +203,7 @@ pub fn jn_notify(webview: Webview, shell: State<Shell>, args: NotifyArgs) -> Val
     if !shell.allows(&webview) {
         return fail("not_allowed");
     }
-    match platform::notify(&policy::cut(&args.title, 120), &policy::cut(&args.body, 500)) {
-        Ok(()) => ok(),
-        Err(why) => fail(why),
-    }
+    result(platform::notify(&policy::cut(&args.title, 120), &policy::cut(&args.body, 500)))
 }
 
 /// Abort any running screen action now.
@@ -213,25 +216,62 @@ pub fn jn_stop(app: AppHandle, webview: Webview, shell: State<Shell>) -> Value {
     ok()
 }
 
-// These arrive in the next step. Until then they exist and answer "unsupported", as the contract asks.
+#[derive(Deserialize)]
+pub struct ReasonArgs {
+    reason: String,
+}
 
-#[tauri::command]
-pub fn jn_biometric() -> Value {
-    unsupported()
+/// Real fingerprint (Touch ID) or Windows Hello. Answers only after the person has used it or given up.
+#[tauri::command(async)]
+pub fn jn_biometric(webview: Webview, shell: State<Shell>, args: ReasonArgs) -> Value {
+    if !shell.allows(&webview) {
+        return fail("not_allowed");
+    }
+    result(platform::biometric(&policy::cut(&args.reason, 200)))
 }
-#[tauri::command]
-pub fn jn_listen_start() -> Value {
-    unsupported()
+
+#[derive(Deserialize)]
+pub struct LangArgs {
+    lang: String,
 }
-#[tauri::command]
-pub fn jn_listen_stop() -> Value {
-    unsupported()
+
+#[tauri::command(async)]
+pub fn jn_listen_start(app: AppHandle, webview: Webview, shell: State<Shell>, args: LangArgs) -> Value {
+    if !shell.allows(&webview) {
+        return fail("not_allowed");
+    }
+    result(platform::listen_start(&app, policy::cut(&args.lang, 20)))
 }
-#[tauri::command]
-pub fn jn_speak() -> Value {
-    unsupported()
+
+#[tauri::command(async)]
+pub fn jn_listen_stop(app: AppHandle, webview: Webview, shell: State<Shell>) -> Value {
+    if !shell.allows(&webview) {
+        return fail("not_allowed");
+    }
+    result(platform::listen_stop(&app))
 }
-#[tauri::command]
-pub fn jn_speak_stop() -> Value {
-    unsupported()
+
+#[derive(Deserialize)]
+pub struct SpeakArgs {
+    text: String,
+    lang: String,
+}
+
+#[tauri::command(async)]
+pub fn jn_speak(app: AppHandle, webview: Webview, shell: State<Shell>, args: SpeakArgs) -> Value {
+    if !shell.allows(&webview) {
+        return fail("not_allowed");
+    }
+    if args.text.trim().is_empty() {
+        return fail("bad_args");
+    }
+    result(platform::speak(&app, policy::cut(&args.text, 4000), policy::cut(&args.lang, 20)))
+}
+
+#[tauri::command(async)]
+pub fn jn_speak_stop(app: AppHandle, webview: Webview, shell: State<Shell>) -> Value {
+    if !shell.allows(&webview) {
+        return fail("not_allowed");
+    }
+    result(platform::speak_stop(&app))
 }

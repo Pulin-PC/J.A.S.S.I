@@ -19,3 +19,7 @@ pub use macos::*;
 mod macos_screen;
 #[cfg(target_os = "macos")]
 pub use macos_screen::*;
+#[cfg(target_os = "macos")]
+mod macos_extras;
+#[cfg(target_os = "macos")]
+pub use macos_extras::*;

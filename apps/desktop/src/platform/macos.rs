@@ -115,7 +115,7 @@ fn open_notifications_permission() {
 }
 
 pub fn permissions() -> Permissions {
-    Permissions { screen: screen_state(), mic: "unsupported", speech: "unsupported", notifications: notifications_state() }
+    Permissions { screen: screen_state(), mic: super::mic_state(), speech: super::speech_state(), notifications: notifications_state() }
 }
 
 /// Shows the system prompt, or opens the exact settings page. `false` = this device has no such permission.
@@ -123,6 +123,8 @@ pub fn open_permission(kind: &str) -> bool {
     match kind {
         "screen" => open_screen_permission(),
         "notifications" if bundled() => open_notifications_permission(),
+        "mic" => return super::open_mic_permission(),
+        "speech" => return super::open_speech_permission(),
         _ => return false,
     }
     true
