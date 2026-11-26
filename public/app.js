@@ -599,26 +599,6 @@ function clock() {
   $("#clock-time").textContent = d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false });
   $("#clock-date").textContent = d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
 }
-const SUGGEST = [
-  ["Order my usual and put the delivery time in my calendar and WhatsApp Riya the ETA", "3 apps · Code Mode", ""],
-  ["Open YouTube and search for lofi beats and set a timer for 10 minutes", "mid-sentence", ""],
-  ["Order lunch for the team", "₹6,840 · fingerprint", "money"],
-  ["Pay 250 to Rahul for chai", "auto-pay", "money"],
-  ["Read my emails", "scam check", ""],
-  ["Remind me to call Mom at 6 pm", "", ""],
-  ["Send payment reminders", "needs OK", "money"],
-  ["Open Google Pay", "locked", "lock"],
-];
-function suggestions() {
-  $("#suggest").innerHTML = SUGGEST.map(([t, k, c]) => `<button class="chip ${c}" data-t="${esc(t)}" title="${esc(t)}">${esc(t.length > 38 ? t.slice(0, 36) + "…" : t)}${k ? ` · <b>${esc(k)}</b>` : ""}</button>`).join("");
-  $("#suggest").onclick = e => { const b = e.target.closest(".chip"); if (b) runText(b.dataset.t); };
-}
-function ticker(s) {
-  const items = ["Safety guard on", "Payments under ₹5,000 go through on their own", "₹5,000 or more needs your fingerprint", "Bank, UPI and ID apps are locked",
-    "Instructions inside emails and web pages are ignored", "Every action is written to your diary", "Payments are in test mode", `MCP: ${location.origin}/mcp`,
-    s.brain.on ? "Brain: Claude Code on your Mac" : "Brain: offline (run npm run brain)"];
-  $("#ticker").innerHTML = items.map(i => `<b>◆</b>${esc(i)}`).join("");
-}
 async function boot() {
   const lines = ["Starting J.A.S.S.I", "Safety guard", "Your apps", "Diary", "MCP server", "Brain"];
   const log = $("#bootlog");
@@ -638,7 +618,7 @@ async function boot() {
   await new Promise(r => setTimeout(r, skip ? 100 : 350));
   $("#boot").classList.add("gone");
   LS.set("jassi.booted", new Date().toDateString());
-  renderApps(); suggestions(); ticker(s);
+  renderApps();
   for (const a of s.pending) showOk(a);
   const q = new URLSearchParams(location.search);
   const back = LS.get("jassi.return"); LS.set("jassi.return", "");
