@@ -116,3 +116,13 @@ test("business brief numbers: pace, orders + AOV, gross margin, complaints/retur
   assert.equal(first.pace.elapsed, 0);
   assert.equal(first.pace.need_per_day, 50000);
 });
+
+test("messages in another app never become WhatsApp; a leftover surname is not a message", () => {
+  const q = new Parser([{ name: "Aditi", aliases: [] }, { name: "Mom", aliases: ["maa"] }], []);
+  const k = t => q.parse(t).map(s => s.kind);
+  assert.deepEqual(k("msg aditi sinha on instagram"), ["unknown"]);
+  assert.deepEqual(k("message aditi on telegram saying hi"), ["unknown"]);
+  assert.deepEqual(k("msg aditi sinha"), ["unknown"]);
+  assert.deepEqual(q.parse("text mom hi")[0].args, { to: "Mom", text: "hi" });
+  assert.deepEqual(q.parse("message aditi on whatsapp saying see you at 5")[0].args, { to: "Aditi", text: "see you at 5" });
+});

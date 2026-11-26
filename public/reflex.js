@@ -50,6 +50,11 @@ export const SITES = {
   translate: "https://translate.google.com", "google translate": "https://translate.google.com", keep: "https://keep.google.com",
 };
 
+// Messages in any app but WhatsApp (the message tool is WhatsApp only).
+const OTHER_CHAT = /\b(?:on|via|in|through|over|using)\s+(?:instagram|insta|ig|telegram|sms|imessage|messages|messenger|facebook|fb|snapchat|snap|linkedin|slack|discord|signal|teams|twitter|x|email|e-mail|mail|gmail)\b/i;
+// One-word messages that are really messages, not surnames.
+const ONE_WORD_MSG = new Set("hi hii hello hey ok okay k yes yeah yep no nope thanks thx ty bye sorry congrats congratulations done coming wait omw lol haha call home late soon".split(" "));
+
 // Short names people say for an app.
 export const APP_ALIAS = { vscode: "visual studio code", "vs code": "visual studio code", yt: "youtube", "you tube": "youtube", "yt music": "youtube music", gmaps: "google maps", insta: "instagram", wa: "whatsapp" };
 
@@ -238,6 +243,9 @@ export class Parser {
 
   _message(rest, c) {
     // "<name> [on whatsapp] [saying|that|:] <text>"  or  "<name> <text>"
+    // The message tool is WhatsApp only. Any other app named ("on Instagram", "via Telegram") goes to the brain,
+    // which opens that app and works it on screen; it must never quietly become a WhatsApp message.
+    if (OTHER_CHAT.test(c)) return [new Step("unknown", { text: c }, { clause: c, free: true })];
     let r = rest.replace(/^(?:it|this|that)\s+to\s+/i, "").replace(/^to\s+/i, "");
     const lr = r.toLowerCase();
     let name = null, text = "", known = false;
@@ -257,6 +265,11 @@ export class Parser {
     const ln = name.toLowerCase();
     if (!known && this.contacts.length && !this.contacts.some(([n]) => n === ln || (ln.length >= 3 && n.startsWith(ln))))
       return [new Step("unknown", { text: c }, { clause: c, free: true })];
+    // "msg aditi sinha": one leftover word with no "saying" is most likely a surname, not a message. A contact saved
+    // as just "Aditi" may not be that person, so the brain checks instead of guessing.
+    const said = /^\s*(?:on\s+whatsapp)?\s*(?:[,:]|saying|that says|that|to say|and say)\s*/i.test(text);
+    const one = stripText(text).toLowerCase();
+    if (!said && /^[a-z]+$/.test(one) && !ONE_WORD_MSG.has(one)) return [new Step("unknown", { text: c }, { clause: c, free: true })];
     text = text.replace(/^\s*(?:on\s+whatsapp)?\s*(?:[,:]|saying|that says|that|to say|and say)?\s*/i, "");
     const dep = DEP.test(text);
     return [new Step("message", { to: name, text: stripText(text) }, { clause: c, free: true, dep, early: !dep })];
