@@ -7,7 +7,7 @@ import { DurableObject } from "cloudflare:workers";
 import demo from "../data/demo.json";
 import { withRt, makeBus, makeApprovals, freshState, today, hhmm, diaryHeader, diaryEntry, parseDiary } from "../server/runtime.js";
 import { api } from "../server/api.js";
-import { cookies, setCookie, sign, unsign, randomId, pkce, googleAuthUrl, googleToken, readIdToken, SCOPES } from "./auth.js";
+import { cookies, setCookie, sign, unsign, randomId, pkce, b64url, googleAuthUrl, googleToken, readIdToken, SCOPES } from "./auth.js";
 
 const enc = new TextEncoder();
 const SESSION = "jassi_s", OAUTH = "jassi_o", INVITE = "jassi_inv";
@@ -221,6 +221,17 @@ export class JassiDirectory extends DurableObject {
         }
         return json({ key });
       }
+      // ---- one-time codes that hand a sign-in from the system browser back to a native app (60 s, single use)
+      case "/authcode/put": {
+        await S.put("authcode:" + body.code, { challenge: body.challenge, data: body.data, exp: Date.now() + 60000 });
+        return json({ ok: true });
+      }
+      case "/authcode/take": {
+        const k = "authcode:" + String(body.code || "");
+        const a = await S.get(k);
+        if (a) await S.delete(k);
+        return json(a && a.exp > Date.now() ? { ok: true, challenge: a.challenge, data: a.data } : { ok: false });
+      }
       case "/mcpkey/lookup": return json({ sub: (await S.get("mcpkey:" + url.searchParams.get("key"))) || null });
       // ---- the Claude Code brain (one bridge on the owner's Mac serves everyone, one Claude process per person)
       case "/brain/status": return json({ on: this.brainOn });
@@ -296,38 +307,64 @@ async function route(req, env) {
     const redirectUri = url.origin + "/auth/google/callback";
     const back = (to, setCookies = []) => { const h = new Headers({ location: to }); for (const s of setCookies) h.append("set-cookie", s); return new Response(null, { status: 302, headers: h }); };
 
+    const appChallenge = v => (/^[\w-]{43}$/.test(v || "") ? v : "");
+    const appLink = async (challenge, data) => {   // jassi://auth?code=<one-time code>: the only thing that ever travels in the link
+      const code = randomId(24);
+      await dirOf(env).fetch("https://dir/authcode/put", { method: "POST", body: JSON.stringify({ code, challenge, data }) });
+      return "jassi://auth?code=" + code;
+    };
+
     // ---------------------------------------------------------- sign-in with Google
     if (p === "/auth/google/start") {
       if (!env.GOOGLE_CLIENT_ID) return back("/?error=" + encodeURIComponent("Google sign-in isn't set up yet."));
       const connect = ["calendar", "gmail"].includes(url.searchParams.get("connect")) ? url.searchParams.get("connect") : "";
-      if (connect && !session) return back("/");
+      // Native apps sign in through the system browser (Google refuses WebViews). "app" is the SHA-256 of a secret only the
+      // app's own page knows, so a one-time code that leaks through the jassi:// link is useless to anyone else.
+      const app = appChallenge(url.searchParams.get("app"));
+      const ticket = app ? await unsign(url.searchParams.get("ticket"), secret) : null;   // who is connecting, when the browser has no session
+      const sub = ticket?.t === "connect" ? ticket.sub : connect ? session?.sub : "";
+      if (connect && !sub) return back("/");
       const { verifier, challenge } = await pkce();
       const state = randomId(16);
-      const o = await sign({ state, verifier, connect, exp: Date.now() + 10 * 60e3 }, secret);
+      const o = await sign({ state, verifier, connect, app, sub: connect ? sub : "", exp: Date.now() + 10 * 60e3 }, secret);
       return back(googleAuthUrl({ clientId: env.GOOGLE_CLIENT_ID, redirectUri, state, challenge, connect }), [setCookie(OAUTH, o, { maxAge: 600, secure })]);
     }
     if (p === "/auth/google/callback") {
       const o = await unsign(c[OAUTH], secret);
       const clear = setCookie(OAUTH, "", { maxAge: 0, secure });
-      if (url.searchParams.get("error")) return back("/?error=" + encodeURIComponent("Google sign-in was cancelled."), [clear]);
+      // Back to the native app with a one-time code, or (in a browser) straight to the page.
+      const done = async (data, to, extra = []) => o?.app ? back(await appLink(o.app, data), [clear]) : back(to, [clear, ...extra]);
+      const fail = msg => done({ error: msg }, "/?error=" + encodeURIComponent(msg));
+      if (url.searchParams.get("error")) return fail("Google sign-in was cancelled.");
       if (!o || o.state !== url.searchParams.get("state")) return back("/?error=" + encodeURIComponent("Sign-in expired. Please try again."), [clear]);
       try {
         const t = await googleToken({ code: url.searchParams.get("code"), client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, redirect_uri: redirectUri, grant_type: "authorization_code", code_verifier: o.verifier });
         const id = readIdToken(t.id_token, env.GOOGLE_CLIENT_ID);
         if (o.connect) {
-          if (!session) return back("/", [clear]);
-          if (!t.refresh_token) return back("/?error=" + encodeURIComponent("Google didn't give access. Please try again."), [clear]);
-          await hubFor(env, session.sub).fetch("https://hub/internal/google", { method: "POST", body: JSON.stringify({
+          if (!o.sub) return back("/", [clear]);
+          if (!t.refresh_token) return fail("Google didn't give access. Please try again.");
+          await hubFor(env, o.sub).fetch("https://hub/internal/google", { method: "POST", body: JSON.stringify({
             access_token: t.access_token, refresh_token: t.refresh_token, expires_at: Date.now() + (t.expires_in || 3600) * 1000, scopes: String(t.scope || "").split(" "), email: id.email }) });
-          return back("/?connected=" + o.connect, [clear]);
+          return done({ connected: o.connect }, "/?connected=" + o.connect);
         }
         const r = await (await dirOf(env).fetch("https://dir/signin", { method: "POST", body: JSON.stringify({ sub: id.sub, email: id.email, email_verified: id.email_verified, name: id.name || id.email, picture: id.picture || "", invite: c[INVITE] || "" }) })).json();
-        if (!r.ok) return back("/?error=" + encodeURIComponent(r.reason), [clear]);
-        const s = await sign({ sub: r.user.sub, email: r.user.email, name: r.user.name, picture: r.user.picture, role: r.user.role, exp: Date.now() + 30 * DAY }, secret);
-        return back("/", [clear, setCookie(SESSION, s, { maxAge: 30 * 86400, secure }), setCookie(INVITE, "", { maxAge: 0, secure })]);
+        if (!r.ok) return fail(r.reason);
+        const who = { sub: r.user.sub, email: r.user.email, name: r.user.name, picture: r.user.picture, role: r.user.role };
+        const s = await sign({ ...who, exp: Date.now() + 30 * DAY }, secret);
+        return done({ session: who }, "/", [setCookie(SESSION, s, { maxAge: 30 * 86400, secure }), setCookie(INVITE, "", { maxAge: 0, secure })]);
       } catch (e) {
-        return back("/?error=" + encodeURIComponent("Google sign-in failed: " + e.message), [clear]);
+        return fail("Google sign-in failed: " + e.message);
       }
+    }
+    // The native app's own page swaps the one-time code (plus its secret) for the session cookie.
+    if (p === "/auth/app") {
+      const r = await (await dirOf(env).fetch("https://dir/authcode/take", { method: "POST", body: JSON.stringify({ code: url.searchParams.get("code") || "" }) })).json();
+      const proof = b64url(await crypto.subtle.digest("SHA-256", enc.encode(url.searchParams.get("v") || "")));
+      if (!r.ok || r.challenge !== proof) return back("/?error=" + encodeURIComponent("Sign-in expired. Please try again."));
+      if (r.data.error) return back("/?error=" + encodeURIComponent(r.data.error));
+      if (r.data.connected) return back("/?connected=" + r.data.connected);
+      const s = await sign({ ...r.data.session, exp: Date.now() + 30 * DAY }, secret);
+      return back("/", [setCookie(SESSION, s, { maxAge: 30 * 86400, secure })]);
     }
     if (p === "/auth/logout") return back("/", [setCookie(SESSION, "", { maxAge: 0, secure })]);
     // Local testing only (wrangler dev with DEV_LOGIN=1): sign in without Google.
@@ -335,7 +372,9 @@ async function route(req, env) {
       const email = url.searchParams.get("email") || "owner@example.com";
       const r = await (await dirOf(env).fetch("https://dir/signin", { method: "POST", body: JSON.stringify({ sub: "dev_" + email, email, email_verified: true, name: url.searchParams.get("name") || email.split("@")[0], picture: "", invite: c[INVITE] || "" }) })).json();
       if (!r.ok) return back("/?error=" + encodeURIComponent(r.reason));
-      const s = await sign({ sub: r.user.sub, email, name: r.user.name, picture: "", role: r.user.role, exp: Date.now() + DAY }, secret);
+      const who = { sub: r.user.sub, email, name: r.user.name, picture: "", role: r.user.role };
+      if (appChallenge(url.searchParams.get("app"))) return back(await appLink(url.searchParams.get("app"), { session: who }));
+      const s = await sign({ ...who, exp: Date.now() + DAY }, secret);
       return back("/", [setCookie(SESSION, s, { maxAge: 86400, secure })]);
     }
     const join = p.match(/^\/join\/([\w-]+)$/);
@@ -370,6 +409,8 @@ async function route(req, env) {
         if (code) invite = await (await dirOf(env).fetch("https://dir/invite?code=" + encodeURIComponent(code))).json();
         return json({ signin: true, google: !!env.GOOGLE_CLIENT_ID, invite, dev: env.DEV_LOGIN === "1" && url.hostname === "localhost" }, 401);
       }
+      // A 5-minute ticket that says who is connecting an app, for flows that continue in the system browser.
+      if (p === "/api/auth/ticket") return json({ ticket: await sign({ t: "connect", sub: session.sub, exp: Date.now() + 5 * 60e3 }, secret) });
       if (p === "/api/invites" || p === "/api/invites/toggle") {
         if (session.role !== "owner") return json({ error: "owner only" }, 403);
         return dirOf(env).fetch(new Request("https://dir" + p.replace("/api", ""), { method: req.method, body: req.method === "POST" ? await req.text() : undefined }));

@@ -1,4 +1,5 @@
 // Sign-in screen, first-time setup (onboarding) and Settings. Plain words everywhere.
+import { native, nativeAuth } from "./native.js";
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const inr = n => "₹" + Math.round(n).toLocaleString("en-IN");
@@ -20,6 +21,7 @@ export function showSignin(info) {
   }
   if (!info.google) { $("#google-btn").classList.add("off"); $("#google-btn").removeAttribute("href"); $("#google-btn").lastChild.textContent = "Google sign-in is being set up"; }
   $("#dev-login").hidden = !info.dev;
+  if (native) $("#google-btn").onclick = e => { e.preventDefault(); if (info.google) nativeAuth("/auth/google/start"); };
   const err = q.get("error");
   if (err) { $("#signin-error").hidden = false; $("#signin-error").textContent = err; }
 }
@@ -59,7 +61,11 @@ export function appTiles(el) {
       await post("/api/settings", { apps }); await ctx.refresh(); appTiles(el); return;
     }
     const con = e.target.dataset.gcon, dis = e.target.dataset.gdis;
-    if (con) { LS.set("jassi.return", $("#onboard").hidden ? "settings" : "onboard"); location.href = "/auth/google/start?connect=" + con; }
+    if (con) {
+      LS.set("jassi.return", $("#onboard").hidden ? "settings" : "onboard");
+      if (!native) location.href = "/auth/google/start?connect=" + con;
+      else { const { ticket } = await fetch("/api/auth/ticket").then(r => r.json()); nativeAuth(`/auth/google/start?connect=${con}&ticket=${encodeURIComponent(ticket)}`); }
+    }
     if (dis) { await post("/api/google/disconnect", { which: dis }); await ctx.refresh(); appTiles(el); ctx.toast("Disconnected", `${dis === "gmail" ? "Gmail" : "Google Calendar"} is no longer connected.`); }
   };
 }
