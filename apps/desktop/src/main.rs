@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod banner;
+mod bubble;
 mod bridge;
 mod channel;
 mod config;
@@ -42,6 +43,11 @@ fn main() {
             bridge::jn_speak_stop,
             bridge::jn_notify,
             bridge::jn_stop,
+            bubble::jn_bubble,
+            bubble::bubble_tap,
+            bubble::bubble_grab,
+            bubble::bubble_move,
+            bubble::bubble_dismiss,
         ])
         .setup(|app| shell::setup(app))
         .on_window_event(|window, event| {

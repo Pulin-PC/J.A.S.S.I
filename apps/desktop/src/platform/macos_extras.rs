@@ -210,6 +210,9 @@ fn start_on_main(app: AppHandle, lang: String) -> Res<()> {
         }
         let request = SFSpeechAudioBufferRecognitionRequest::new();
         request.setShouldReportPartialResults(true);
+        if crate::bridge::LISTEN_ON_DEVICE.load(Ordering::Relaxed) && recognizer.supportsOnDeviceRecognition() {
+            request.setRequiresOnDeviceRecognition(true);
+        }
 
         let engine = AVAudioEngine::new();
         let input = engine.inputNode();

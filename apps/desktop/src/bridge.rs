@@ -9,10 +9,10 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tauri::{AppHandle, State, Webview};
 
-fn ok() -> Value {
+pub fn ok() -> Value {
     json!({ "ok": true })
 }
-fn fail(error: &str) -> Value {
+pub fn fail(error: &str) -> Value {
     json!({ "ok": false, "error": error })
 }
 fn unsupported() -> Value {
@@ -233,13 +233,20 @@ pub fn jn_biometric(app: AppHandle, webview: Webview, shell: State<Shell>, args:
 #[derive(Deserialize)]
 pub struct LangArgs {
     lang: String,
+    /// Hands-free: recognise on this device when it can, so an always-on mic never streams audio away.
+    #[serde(default, rename = "onDevice")]
+    on_device: bool,
 }
+
+/// Read by the platform's listener when it starts a session.
+pub static LISTEN_ON_DEVICE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 #[tauri::command(async)]
 pub fn jn_listen_start(app: AppHandle, webview: Webview, shell: State<Shell>, args: LangArgs) -> Value {
     if !shell.allows(&webview) {
         return fail("not_allowed");
     }
+    LISTEN_ON_DEVICE.store(args.on_device, std::sync::atomic::Ordering::Relaxed);
     result(platform::listen_start(&app, policy::cut(&args.lang, 20)))
 }
 

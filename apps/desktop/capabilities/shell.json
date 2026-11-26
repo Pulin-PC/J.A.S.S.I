@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "shell",
-  "description": "The two bundled screens (start / can't reach, and the working banner). They may only ask to connect and to stop. The bridge itself is granted at start-up, to the JASSI_URL origin only (src/shell.rs).",
+  "description": "The bundled screens (start / can't reach, the working banner, the floating bubble and its bin). They may only ask to connect, to stop, and to move, tap or put away the bubble. The bridge itself is granted at start-up, to the JASSI_URL origin only (src/shell.rs).",
   "local": true,
-  "windows": ["main", "banner"],
-  "permissions": ["allow-shell-connect", "allow-banner-stop"]
+  "windows": ["main", "banner", "bubble", "bin"],
+  "permissions": ["allow-shell-connect", "allow-banner-stop", "allow-bubble-tap", "allow-bubble-grab", "allow-bubble-move", "allow-bubble-dismiss"]
 }

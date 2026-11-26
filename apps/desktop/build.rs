@@ -21,6 +21,11 @@ const COMMANDS: &[&str] = &[
     "jn_speak_stop",
     "jn_notify",
     "jn_stop",
+    "jn_bubble",
+    "bubble_tap",
+    "bubble_grab",
+    "bubble_move",
+    "bubble_dismiss",
 ];
 
 fn main() {

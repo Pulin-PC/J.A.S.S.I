@@ -29,6 +29,7 @@ const BRIDGE_COMMANDS: &[&str] = &[
     "allow-jn-speak-stop",
     "allow-jn-notify",
     "allow-jn-stop",
+    "allow-jn-bubble",
 ];
 
 #[derive(Default)]
@@ -106,6 +107,7 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
     *app.state::<Shell>().start_url.lock().unwrap() = main.url().ok();
     banner::create(app)?;
+    crate::bubble::create(app)?;
 
     // The stop shortcut works from any app: Control + Option + Esc (Ctrl + Alt + Esc on Windows).
     let stop = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Escape);

@@ -29,12 +29,13 @@
     setPolicy: function (o) { o = obj(o); return call("jn_set_policy", { blockedApps: Array.isArray(o.blockedApps) ? o.blockedApps.map(str) : [] }); },
     openExternal: function (url) { return call("jn_open_external", { url: str(url) }); },
     biometric: function (o) { return call("jn_biometric", { reason: str(obj(o).reason) }); },
-    listenStart: function (o) { return call("jn_listen_start", { lang: str(obj(o).lang) }); },
+    listenStart: function (o) { o = obj(o); return call("jn_listen_start", { lang: str(o.lang), onDevice: o.onDevice === true }); },
     listenStop: function () { return call("jn_listen_stop"); },
     speak: function (o) { o = obj(o); return call("jn_speak", { text: str(o.text), lang: str(o.lang) }); },
     speakStop: function () { return call("jn_speak_stop"); },
     notify: function (o) { o = obj(o); return call("jn_notify", { title: str(o.title), body: str(o.body) }); },
-    stop: function () { return call("jn_stop"); }
+    stop: function () { return call("jn_stop"); },
+    bubble: function (o) { o = obj(o); var a = {}; if (typeof o.visible === "boolean") a.visible = o.visible; if (typeof o.state === "string") a.state = o.state; if (typeof o.text === "string") { a.text = o.text; a.who = o.who === "jassi" ? "jassi" : "you"; } return call("jn_bubble", a); }
   });
 
   // Links that leave J.A.S.S.I open in the default browser, never in this window.
