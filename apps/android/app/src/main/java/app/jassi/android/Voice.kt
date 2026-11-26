@@ -8,12 +8,14 @@ import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import org.json.JSONObject
 import java.util.Locale
+import java.util.concurrent.Executors
 
 /** listenStart / listenStop (speech-to-text with partial results) and speak / speakStop (text-to-speech). */
 class Voice(private val activity: MainActivity) {
     private var recognizer: SpeechRecognizer? = null
-    private var tts: TextToSpeech? = null
+    @Volatile private var tts: TextToSpeech? = null
     private var ttsReady = false
+    private val ttsThread = Executors.newSingleThreadExecutor()   // the speech engine can be slow to answer: keep it off the main thread
     private var afterTtsReady: (() -> Unit)? = null
 
     // ── listening ───────────────────────────────────────────────────────────────────────────
@@ -84,7 +86,7 @@ class Voice(private val activity: MainActivity) {
 
     fun speak(text: String, lang: String?, done: Reply) {
         if (text.isBlank()) return done(fail("bad_request"))
-        val say = { done(say(text, lang)) }
+        val say = { ttsThread.execute { done(say(text, lang)) } }
         when {
             ttsReady -> say()
             tts != null -> afterTtsReady = say   // still starting: say the newest request once it is ready
@@ -113,16 +115,17 @@ class Voice(private val activity: MainActivity) {
     }
 
     fun speakStop(): JSONObject {
-        tts?.stop()
+        ttsThread.execute { tts?.stop() }
         return ok()
     }
 
     fun shutDown() {
         recognizer?.destroy()
         recognizer = null
-        tts?.shutdown()
+        val engine = tts
         tts = null
         ttsReady = false
+        ttsThread.execute { engine?.shutdown() }
     }
 
     private companion object {
