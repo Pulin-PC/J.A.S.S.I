@@ -152,6 +152,13 @@ final class WebShell: NSObject, ObservableObject {
         send(.auth(url: link.absoluteString))
     }
 
+    /// Words handed in from Siri or Shortcuts. Held until the page has loaded.
+    func deliverAsk(_ text: String) {
+        let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !words.isEmpty else { return }
+        send(.ask(text: words))
+    }
+
     private func open(_ decision: NavigationDecision) {
         switch decision {
         case .external(let url): UIApplication.shared.open(url)
