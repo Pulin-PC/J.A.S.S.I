@@ -14,6 +14,7 @@ final class WebShell: NSObject, ObservableObject {
     let webView: WKWebView
     private let base = AppConfig.origin
     private var queue = EventQueue()
+    private let signIn = SignIn()
 
     private override init() {
         let config = WKWebViewConfiguration()
@@ -69,13 +70,35 @@ final class WebShell: NSObject, ObservableObject {
     // MARK: Bridge, page → shell
 
     private func run(_ call: BridgeCall) async -> [String: Any] {
-        BridgeReply.unsupported
+        switch call {
+        case .openExternal(let url):
+            switch ExternalRoute.route(url, base: base) {
+            case .authSession(let url):
+                let started = signIn.start(url: url) { [weak self] link in self?.handleIncoming(link) }
+                return started ? BridgeReply.ok : BridgeReply.fail("failed")
+            case .browser(let url):
+                return await UIApplication.shared.open(url) ? BridgeReply.ok : BridgeReply.fail("failed")
+            case .reject:
+                return BridgeReply.fail(BridgeFailure.badArgs.rawValue)
+            }
+        default:
+            return BridgeReply.unsupported
+        }
+    }
+
+    // MARK: Links
+
+    /// A link that opened the app. Only `jassi://auth…` means anything; it goes to the page untouched (contract §3).
+    func handleIncoming(_ url: URL) {
+        guard case .auth(let link)? = DeepLink.parse(url) else { return }
+        send(.auth(url: link.absoluteString))
     }
 
     private func open(_ decision: NavigationDecision) {
         switch decision {
         case .external(let url): UIApplication.shared.open(url)
-        case .allow, .deepLink, .block: break
+        case .deepLink(let url): handleIncoming(url)
+        case .allow, .block: break
         }
     }
 

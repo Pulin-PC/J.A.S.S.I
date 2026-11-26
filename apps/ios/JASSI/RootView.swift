@@ -14,6 +14,7 @@ struct RootView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .onOpenURL { shell.handleIncoming($0) }
     }
 }
 
