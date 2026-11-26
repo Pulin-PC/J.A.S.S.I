@@ -32,6 +32,11 @@ test("'open youtube / yt and type X' opens YouTube and searches it there", () =>
   assert.deepEqual(kinds("type hello"), ["ask"]);   // no site to type into: the brain decides
 });
 
+test("an app I don't know goes to the brain, never a guessed action", () => {
+  assert.deepEqual(kinds("open spotfy"), ["unknown"]);
+  assert.deepEqual(kinds("open notion and type meeting notes"), ["open_app", "ask"]);
+});
+
 test("a site name that is a prefix of a locked app does not fire early", () => {
   assert.equal(p.parse("open google")[0].early, false);
 });

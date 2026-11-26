@@ -159,8 +159,15 @@ class Utterance {
       if (/^(yes|yeah|yep|sure|do it|send it|go ahead|confirm|ok|okay)\b/i.test(this.text)) return answerOk(true);
       if (/^(no|nope|cancel|don't|stop)\b/i.test(this.text)) return answerOk(false);
     }
-    const actions = rest.filter(([s]) => !["unknown", "ask"].includes(s.kind));
     const thinking = rest.filter(([s]) => ["unknown", "ask"].includes(s.kind));
+    // Any part I'm not sure of: the brain (a real agent) takes the whole rest of the sentence, in order, with what's
+    // already done, instead of me guessing at the clear parts and leaving holes.
+    if (thinking.length) {
+      rest.forEach(([, i]) => this.fired.set(i, true));
+      const done = this.steps.filter((s, i) => !rest.some(([, j]) => j === i)).map(s => s.clause);
+      return askBrain(done.length ? `${this.text}\n[Already done by J.A.S.S.I, don't repeat: ${done.join("; ")}]` : this.text);
+    }
+    const actions = rest;
     if (actions.length >= 2 || (actions.length && actions.some(([s]) => s.dep) && actions.some(([s]) => s.hold))) {
       actions.forEach(([, i]) => this.fired.set(i, true));
       renderHeard(this.text, this.steps, new Set(this.fired.keys()));
@@ -168,7 +175,6 @@ class Utterance {
     } else {
       for (const [s, i] of actions) { this.fire(s, i, false); }
     }
-    if (thinking.length) await askBrain(thinking.length === this.steps.length ? this.text : thinking.map(([s]) => s.clause).join(", "));
   }
 }
 let cur = null;

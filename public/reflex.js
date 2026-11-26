@@ -213,7 +213,7 @@ export class Parser {
       if (this.blocked.includes(t)) return S("open_app", { app: t });
       if (SITES[t]) return S("open_app", { app: t }, { early: !longer });
       if (/^[\w-]+\.(com|in|org|io|dev|ai|net|co)(\/\S*)?$/.test(t)) return S("open_app", { app: t });
-      return S("open_app", { app: t }, { early: false, free: true });
+      return S("unknown", { text: c }, { free: true });   // not an app or site I know: the brain works it out, no guessing
     }
     return S("unknown", { text: c }, { free: true });
   }
