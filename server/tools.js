@@ -52,7 +52,8 @@ const SEARCH = {
 // ---- screen control (the native apps): which app is in front, and may J.A.S.S.I work in it?
 const cut = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 const scanned = () => rt.state.scan?.apps || [];
-const screenOn = id => !!rt.state.settings?.screenApps?.[id];
+// On by default, like a person at the keyboard; the Settings switch turns an app off. Locked apps are blocked elsewhere.
+const screenOn = id => rt.state.settings?.screenApps?.[id] !== false && scanned().find(a => a.id === id)?.tier !== "avoid";
 function findScreenApp(q) {
   const n0 = String(q || "").toLowerCase().trim().replace(/\s+app$/, ""), n = APP_ALIAS[n0] || n0, lc = a => a.name.toLowerCase();
   if (!n) return null;

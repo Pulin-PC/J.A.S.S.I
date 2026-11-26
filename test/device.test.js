@@ -101,13 +101,15 @@ test("api: device routes need the device token; the scan sorts apps and keeps lo
   const scan = JSON.parse((await api("POST", "/api/device/apps", JSON.stringify({ platform: "android", apps: [{ id: "com.blinkit", name: "Blinkit" }, { id: "com.phonepe.app", name: "PhonePe" }] }))).body).scan;
   assert.deepEqual(scan.apps.map(a => a.tier), ["screen", "locked"]);
   await api("POST", "/api/settings", JSON.stringify({ screenApps: { "com.blinkit": true, "com.phonepe.app": true, "made.up": true } }));
-  assert.deepEqual(rt.state.settings.screenApps, { "com.blinkit": true });                  // locked and unknown apps can't be turned on
+  assert.deepEqual(rt.state.settings.screenApps, {});                                        // on is the default; locked and unknown apps aren't stored
+  await api("POST", "/api/settings", JSON.stringify({ screenApps: { "com.blinkit": false } }));
+  assert.deepEqual(rt.state.settings.screenApps, { "com.blinkit": false });                 // turning one off is remembered
 });
 
 test("screen tools: open, look, act - with the guard in between", async () => {
   fresh();
   rt.state.scan = { apps: classifyAll([{ id: "com.whatsapp.w4b", name: "WA Business" }, { id: "com.blinkit", name: "Blinkit" }, { id: "com.phonepe.app", name: "PhonePe" }], "android") };
-  rt.state.settings.screenApps = { "com.whatsapp.w4b": true };
+  rt.state.settings.screenApps = { "com.blinkit": false };   // every app is on unless turned off
   const dev = await deviceFor((await pairDevice({ platform: "android" })).token);
   let screen = { ...SCREEN, app: { id: "com.whatsapp.w4b", name: "WA Business" } };
   const ops = [];
@@ -115,7 +117,7 @@ test("screen tools: open, look, act - with the guard in between", async () => {
   const asked = autoAnswer(true);
   try {
     assert.equal((await call("screen_act", { action: "tap", n: 2 }, { origin: "brain" })).level, "need");           // must look first
-    assert.equal((await call("screen_open", { app: "Blinkit" }, { origin: "brain" })).level, "block");                // not turned on
+    assert.equal((await call("screen_open", { app: "Blinkit" }, { origin: "brain" })).level, "block");                // turned off
     assert.equal((await call("screen_open", { app: "PhonePe" }, { origin: "brain" })).level, "block");                // locked
     const opened = await call("screen_open", { app: "WA Business" }, { origin: "brain" });
     assert.equal(opened.ok, true); assert.equal(opened.level, "confirm");                                             // asked once for the app

@@ -79,7 +79,7 @@ export async function api(method, path, bodyText, headers = {}, query = null) {
       if (b.screenApps && typeof b.screenApps === "object") {
         const ok = new Map((rt.state.scan?.apps || []).filter(a => a.tier === "screen").map(a => [a.id, a]));
         st.screenApps ||= {};
-        for (const [k, v] of Object.entries(b.screenApps)) if (ok.has(k)) { if (v) st.screenApps[k] = true; else delete st.screenApps[k]; }
+        for (const [k, v] of Object.entries(b.screenApps)) if (ok.has(k)) { if (v) delete st.screenApps[k]; else st.screenApps[k] = false; }
       }
       rt.save();
       return J(200, { ok: true, settings: st, onboarded: rt.state.onboarded });

@@ -124,10 +124,10 @@ export function deviceApps(el) {
       const ctl = locked ? `<span class="lock">🔒 Locked</span>` : off ? `<span class="lock">Not offered</span>`
         : a.mcp ? (S.connections?.servers.some(x => x.id === a.mcp) ? `<span class="pill-s">✓ Connected</span>` : `<button class="mini on" data-mcon="${esc(a.mcp)}">Connect</button>`)
         : a.plug ? `<span class="pill-s">${esc(builtIn[a.plug] || "Built in")} ↑</span>`
-        : `<label class="switch"><input type="checkbox" data-screen="${esc(a.id)}" ${on[a.id] ? "checked" : ""}><i></i></label>`;
+        : `<label class="switch"><input type="checkbox" data-screen="${esc(a.id)}" ${on[a.id] !== false ? "checked" : ""}><i></i></label>`;
       const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
       const note = locked ? esc(cap(a.how.replace("Locked: ", ""))) + ". I never open these." : a.mcp ? "Official connection · sign in with your own account" : a.plug ? "Uses the connection above" : esc(a.how);
-      return `<div class="tile ${locked || off ? "locked" : ""} ${on[a.id] ? "is-on" : ""}"><span class="t-ic">${esc(a.name[0] || "?")}</span><span class="t-txt"><b>${esc(a.name)}</b><small>${note}</small></span>${ctl}</div>`;
+      return `<div class="tile ${locked || off ? "locked" : ""} ${on[a.id] !== false ? "is-on" : ""}"><span class="t-ic">${esc(a.name[0] || "?")}</span><span class="t-txt"><b>${esc(a.name)}</b><small>${note}</small></span>${ctl}</div>`;
     }).join("")}</div>
     <p class="ob-foot">${canScreen ? "For apps with a switch, I work the app on your screen, the way you would. You see a banner while I work and can stop me any time. Buttons that send, delete or pay always ask you first." : ""}${hidden ? ` ${hidden} other ${hidden === 1 ? "app isn't" : "apps aren't"} shown.` : ""}</p>
     <button class="ghost small" id="dev-rescan">Look again</button>`;
