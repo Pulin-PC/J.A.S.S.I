@@ -135,10 +135,21 @@ Honest view: this helps, but it is not a guarantee. The screen-control part of J
 
 ## Not proven yet
 
-Things the simulator can't show. Check them on a real iPhone:
+Checked in the simulator (iPhone 17, iOS 27.2): the build, the tests, the live site loading, every bridge call that needs no tap, a frame being refused, outside links going to Safari, the can't-reach screen, and a `jassi://auth?code=test` link followed inside the app arriving as the `auth` event.
+
+Not run in the simulator, because each needs a tap on a system pop-up. Use the check page in `dev/` and tap through them:
+
+- Tapping **Open** on "Open in J.A.S.S.I?" after `xcrun simctl openurl booted "jassi://auth?code=test"` (the link arriving from outside the app).
+- The `permission` event after tapping **Allow** for the microphone, speech or alerts.
+- `notify` once alerts are allowed.
+- The Face ID question (Simulator menu: Features → Face ID → Enrolled, then Matching Face).
+- The sign-in sheet opening and coming back, including a real Google sign-in.
+- "Ask J.A.S.S.I" in the Shortcuts app.
+- `listenStart`, and whether `speak` is heard.
+
+Things no simulator can show. Check them on a real iPhone:
 
 - Face ID / Touch ID with a real face or finger (the simulator only pretends).
 - Siri hearing "Ask J.A.S.S.I" and passing the words on.
 - Speech-to-text with a real microphone and real speech, including `hi-IN`.
 - The app list: the 50 app ids and link schemes are from public knowledge and have not been checked against a phone with those apps installed.
-- The full Google sign-in round trip, which needs the server side of the contract (`/auth/google/start?app=…` sending the browser to `jassi://auth?code=…`).
