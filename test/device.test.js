@@ -154,3 +154,38 @@ test("screen tools: saying no stops the step", async () => {
     assert.equal(ops.length, 0);
   } finally { stop(); }
 });
+
+test("email: drafts never send, sends ask first, addresses can't smuggle headers", async () => {
+  const { rawEmail, isEmail } = await import("../server/mime.js");
+  const { Parser } = await import("../public/reflex.js");
+  const p = new Parser([{ name: "Rahul", aliases: [] }], []);
+  assert.deepEqual(p.parse("draft an email to Rahul saying the deck is ready").map(s => [s.kind, s.args]), [["draft_email", { to: "Rahul", text: "the deck is ready" }]]);
+  assert.equal(p.parse("email Rahul saying the deck is ready")[0].kind, "email");
+  assert.equal(p.parse("read my emails and draft a reply to Rahul saying thanks").map(s => s.kind).join(), "read_email,draft_email");
+  assert.ok(isEmail("a.b@example.co.in") && !isEmail("a@b.com\r\nBcc: x@y.com") && !isEmail("Rahul <r@x.com>") && !isEmail("nobody"));
+  assert.throws(() => rawEmail({ to: "x@y.com\nBcc: z@y.com", text: "hi" }));
+  const mail = Buffer.from(rawEmail({ to: "r@example.com", subject: "Deck ₹\r\nBcc: evil@x.com", text: "Ready.\r\nBcc: evil@x.com" }), "base64url").toString();
+  assert.equal(mail.split("\r\n").filter(l => /^bcc:/i.test(l)).length, 0);                // nothing typed can become a header
+  assert.ok(mail.startsWith("To: r@example.com\r\nSubject: =?UTF-8?B?"));
+
+  fresh();
+  rt.state.settings.apps.gmail = true;
+  const sent = [], drafted = [];
+  const asked = autoAnswer(true);
+  // not connected to Google: a draft is a link you open, and nothing asks
+  const d0 = await call("draft_email", { to: "Rahul", text: "The deck is ready" }, { origin: "you" });
+  assert.equal(d0.level, "auto"); assert.ok(d0.open.startsWith("mailto:"));
+  // connected, reading only: say how to fix it
+  rt.google = { has: k => k === "gmail", canWrite: () => false, draftEmail: m => drafted.push(m), sendEmail: m => sent.push(m) };
+  assert.match((await call("draft_email", { to: "Rahul", text: "Hi" }, { origin: "you" })).say, /Reconnect Gmail/);
+  // connected with writing: a real draft, still no question; a send asks first
+  rt.google.canWrite = () => true;
+  const d1 = await call("draft_email", { to: "Rahul", subject: "Deck", text: "The deck is ready" }, { origin: "brain" });
+  assert.equal(d1.ok, true); assert.equal(d1.level, "auto"); assert.equal(drafted.length, 1); assert.equal(sent.length, 0);
+  assert.equal(asked.length, 0);
+  const s1 = await call("send_email", { to: "someone@example.com", text: "Hello" }, { origin: "brain" });
+  assert.equal(s1.level, "confirm"); assert.equal(s1.sent, true); assert.equal(sent[0].to, "someone@example.com");
+  assert.equal((await call("draft_email", { to: "Rahul", text: "x" }, { origin: "content" })).level, "confirm");      // started by something it read
+  assert.equal((await call("send_email", { to: "Bob <b@x.com>", text: "x" }, { origin: "you" })).level, "need");       // not a plain address
+  rt.google = null;
+});

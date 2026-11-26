@@ -8,6 +8,7 @@ import demo from "../data/demo.json";
 import { withRt, makeBus, makeApprovals, freshState, today, hhmm, diaryHeader, diaryEntry, parseDiary } from "../server/runtime.js";
 import { api } from "../server/api.js";
 import { makeDeviceHub, hashToken } from "../server/device.js";
+import { rawEmail } from "../server/mime.js";
 import { cookies, setCookie, sign, unsign, randomId, pkce, b64url, googleAuthUrl, googleToken, readIdToken, SCOPES } from "./auth.js";
 
 const enc = new TextEncoder();
@@ -92,8 +93,12 @@ export class JassiHub extends DurableObject {
       return data;
     }
     const unescape = s => String(s || "").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+    const gmail = (path, mail) => call("https://gmail.googleapis.com/gmail/v1/users/me/" + path, { method: "POST", body: JSON.stringify(path === "drafts" ? { message: { raw: rawEmail(mail) } } : { raw: rawEmail(mail) }) });
     return {
       has,
+      canWrite: () => has("gmail") && (hub.google.scopes || []).includes(SCOPES.gmail[1]),
+      draftEmail: mail => gmail("drafts", mail),            // sits in your Drafts until you send it
+      sendEmail: mail => gmail("messages/send", mail),      // only ever called after your yes (guard kind "send")
       get email() { return hub.google?.email || ""; },
       async addEvent(title, when) {
         const iso = t => new Date(t).toISOString();

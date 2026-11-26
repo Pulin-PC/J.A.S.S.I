@@ -7,6 +7,7 @@ import { businessMetrics } from "./metrics.js";
 import { SITES } from "../public/reflex.js";
 import { deviceOp, deviceSay, SESSION_MS } from "./device.js";
 import { lockedReason } from "./catalog.js";
+import { isEmail } from "./mime.js";
 
 const inr = n => "₹" + Number(n).toLocaleString("en-IN");
 const DEP = /\b(the eta|eta|delivery time|when (it|the food|the order) (arrives|comes)|the order|it arrives)\b/i;
@@ -19,6 +20,12 @@ function findContact(name) {
   const n = String(name || "").toLowerCase().trim();
   return rt.demo.contacts.find(c => c.name.toLowerCase() === n || (c.aliases || []).some(a => a === n))
     || rt.demo.contacts.find(c => c.name.toLowerCase().startsWith(n) && n.length >= 3);
+}
+// A contact's name or a plain address -> where the email goes. Anything else is refused (no header tricks).
+function mailTo(who) {
+  const c = findContact(who);
+  if (c?.email) return { to: c.email, name: c.name };
+  return isEmail(String(who || "").trim()) ? { to: String(who).trim(), name: String(who).trim() } : null;
 }
 function findDish(item) {
   const i = String(item || "usual").toLowerCase().replace(/^(my|the|a|an|some)\s+/, "").replace(/\s+(please|again)$/, "");
@@ -145,16 +152,35 @@ export const TOOLS = [
     },
   },
   {
+    name: "draft_email", kind: "self", app: "gmail",
+    description: "Write an email and leave it in the user's Gmail Drafts for them to read over and send. Nothing is sent. Use this whenever the user says draft, or when they haven't clearly asked to send.",
+    inputSchema: S({ to: str("contact name or email"), subject: str("subject"), text: str("body") }, ["to", "text"]),
+    title: a => `Draft an email to ${a.to}`,
+    check(a) { need(mailTo(a.to), `I don't know "${a.to}". Say their email address.`); need(a.text, "What should the email say?"); },
+    async run(a) {
+      const { to, name } = mailTo(a.to), subject = a.subject || "Quick note";
+      if (rt.google?.has("gmail")) {
+        need(rt.google.canWrite(), "I can read your Gmail but not write in it yet. Reconnect Gmail in Settings, under Apps.");
+        await rt.google.draftEmail({ to, subject, text: a.text });
+        return { say: `Your draft to ${name} is in Gmail. Read it over and send it when you're happy.`, to, subject, open: "https://mail.google.com/mail/#drafts", google: true };
+      }
+      return { say: `Your draft to ${name} is ready. Read it over and send it when you're happy.`, to, subject, open: `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(a.text)}` };
+    },
+  },
+  {
     name: "send_email", kind: "send", app: "gmail",
-    description: "Email someone. Opens the user's mail app with the email written; it reaches another person, so the user must say yes first.",
+    description: "Send an email from the user's Gmail. It reaches another person, so the user must say yes first. If Gmail isn't connected, it opens their mail app with the email written instead.",
     inputSchema: S({ to: str("contact name or email"), subject: str("subject"), text: str("body") }, ["to", "text"]),
     title: a => `Email ${a.to}`,
-    check: a => need(findContact(a.to) || /@/.test(a.to), `I don't know "${a.to}".`),
-    run(a) {
-      const c = findContact(a.to); const to = c ? c.email : a.to;
-      const link = `mailto:${to}?subject=${encodeURIComponent(a.subject || "Quick note")}&body=${encodeURIComponent(a.text)}`;
+    check(a) { need(mailTo(a.to), `I don't know "${a.to}". Say their email address.`); need(a.text, "What should the email say?"); },
+    async run(a) {
+      const { to, name } = mailTo(a.to), subject = a.subject || "Quick note";
       rt.state.outbox.push({ to, text: a.text, at: Date.now() }); rt.save();
-      return { say: `Email to ${c ? c.name : to} is ready to go.`, open: link };
+      if (rt.google?.canWrite?.()) {
+        await rt.google.sendEmail({ to, subject, text: a.text });
+        return { say: `Email sent to ${name}.`, to, subject, sent: true, google: true };
+      }
+      return { say: `Email to ${name} is ready to go.`, open: `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(a.text)}` };
     },
   },
   {
@@ -431,7 +457,7 @@ export async function call(name, args = {}, { origin = "you", early = false, via
 function describe(name, a, amount) {
   if (name === "order_food") { const d = findDish(a.item)?.[1]; return d ? `${d.name} from ${d.restaurant}. ${inr(d.price)} will be paid from your J.A.S.S.I wallet (test mode).` : ""; }
   if (name === "pay") return `${inr(amount)} to ${a.to}${a.note ? " for " + a.note : ""}. Razorpay test mode: no real money moves.`;
-  if (name === "send_email") return `To ${a.to}: "${a.text}"`;
+  if (name === "send_email" || name === "draft_email") return `To ${mailTo(a.to)?.to || a.to}${a.subject ? ` · ${a.subject}` : ""}\n"${a.text}"`;
   if (name === "chase_unpaid") return rt.demo.business.overdue.map(o => `${o.customer} · ${inr(o.amount)} · ${o.days} days late`).join("\n");
   if (name === "draft_message") return `To ${a.to}: "${a.text}"`;
   if (name === "screen_open") return "I'll bring this app to the front and work in it for you. A banner shows while I work, and you can stop me any time.";
@@ -447,6 +473,7 @@ export function stepToCall(step) {
     case "pay": return ["pay", { to: a.to, amount: a.amount, note: a.note }];
     case "message": return ["draft_message", { to: a.to, text: a.text }];
     case "email": return ["send_email", { to: a.to, text: a.text }];
+    case "draft_email": return ["draft_email", { to: a.to, text: a.text }];
     case "chase_unpaid": return ["chase_unpaid", {}];
     case "event": return ["add_event", { title: a.title, when: a.when || undefined }];
     case "calendar_list": return ["list_events", {}];

@@ -16,7 +16,7 @@ export async function snapshot() {
   const { demo, state } = rt;
   return {
     me: rt.me, settings: state.settings, onboarded: !!state.onboarded,
-    google: rt.google ? { available: true, calendar: rt.google.has("calendar"), gmail: rt.google.has("gmail"), email: rt.google.email || "" } : { available: false },
+    google: rt.google ? { available: true, calendar: rt.google.has("calendar"), gmail: rt.google.has("gmail"), gmailWrite: !!rt.google.canWrite?.(), email: rt.google.email || "" } : { available: false },
     user: demo.user, apps: demo.apps,
     contacts: demo.contacts.map(c => ({ name: c.name, aliases: c.aliases })),
     blocked: demo.blocked_apps, limits: LIMITS, spentToday: rt.spentToday(),

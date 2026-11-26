@@ -181,7 +181,7 @@ function markEarly(i, u, ms) {
 }
 
 // ================================================================ running things
-const KIND_LABEL = { order: "Order", pay: "Pay", message: "WhatsApp", email: "Email", event: "Calendar", timer: "Timer", reminder: "Reminder", note: "Note", search: "Search", play: "Play", directions: "Maps", open_app: "Open", brief: "Brief", read_email: "Email", recall: "Memory", calendar_list: "Calendar", chase_unpaid: "Reminders" };
+const KIND_LABEL = { order: "Order", pay: "Pay", message: "WhatsApp", email: "Email", draft_email: "Draft", event: "Calendar", timer: "Timer", reminder: "Reminder", note: "Note", search: "Search", play: "Play", directions: "Maps", open_app: "Open", brief: "Brief", read_email: "Email", recall: "Memory", calendar_list: "Calendar", chase_unpaid: "Reminders" };
 
 async function runStep(st, { early, u, t }) {
   setMode("thinking");
@@ -257,8 +257,8 @@ function bindCard(li, r) {
   if (r.ok && r.emails) li.querySelector(".say").innerHTML = r.emails.map(m => `<div>• <b>${esc(m.from)}</b>: ${esc(m.subject)}${m.warning ? ` <span class="tag block">${esc(m.warning)}</span>` : ""}</div>`).join("");
   pulseApp(r.tool);
 }
-const openLabel = r => ({ draft_message: "Open WhatsApp · tap Send", send_email: "Open email", directions: "Start in Maps", play: "Play", web_search: "See results", open_app: "Open" })[r.tool] || "Open";
-const TOOL_APP = { order_food: "swiggy", pay: "razorpay", add_event: "calendar", list_events: "calendar", draft_message: "whatsapp", send_email: "gmail", read_email: "gmail", directions: "maps", play: "youtube", web_search: "youtube", business_brief: "books", chase_unpaid: "books" };
+const openLabel = r => ({ draft_message: "Open WhatsApp · tap Send", send_email: "Open email", draft_email: "Open the draft", directions: "Start in Maps", play: "Play", web_search: "See results", open_app: "Open" })[r.tool] || "Open";
+const TOOL_APP = { order_food: "swiggy", pay: "razorpay", add_event: "calendar", list_events: "calendar", draft_message: "whatsapp", send_email: "gmail", draft_email: "gmail", read_email: "gmail", directions: "maps", play: "youtube", web_search: "youtube", business_brief: "books", chase_unpaid: "books" };
 function pulseApp(tool) {
   const el = document.querySelector(`.apps li[data-id="${TOOL_APP[tool]}"]`);
   if (!el) return;

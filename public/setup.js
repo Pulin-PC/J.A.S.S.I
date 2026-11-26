@@ -38,11 +38,13 @@ export function appTiles(el) {
     const g = google.available && (a.id === "calendar" || a.id === "gmail");
     const gOn = g && google[a.id];
     const isOn = !!on[a.id];
+    const readOnly = gOn && a.id === "gmail" && !google.gmailWrite;   // connected before J.A.S.S.I could write drafts
     let ctl;
     if (locked) ctl = `<span class="lock">🔒 Locked</span>`;
-    else if (g) ctl = gOn ? `<button class="mini" data-gdis="${a.id}">Disconnect</button>` : `<button class="mini on" data-gcon="${a.id}">Connect</button>`;
+    else if (g) ctl = readOnly ? `<button class="mini on" data-gcon="${a.id}">Reconnect</button>` : gOn ? `<button class="mini" data-gdis="${a.id}">Disconnect</button>` : `<button class="mini on" data-gcon="${a.id}">Connect</button>`;
     else ctl = `<label class="switch"><input type="checkbox" data-app="${a.id}" ${isOn ? "checked" : ""}><i></i></label>`;
     const note = locked ? esc(a.how.replace("Blocked: ", "")) + ". Payments go through J.A.S.S.I Pay."
+      : readOnly ? "Reading only. Reconnect so I can write drafts, and send when you say yes."
       : g ? (gOn ? `✓ Your real ${a.name}${google.email ? " · " + esc(google.email) : ""}` : `Your real ${a.name}, with your Google account`)
       : esc(a.how) + (["swiggy", "zomato", "books", "razorpay"].includes(a.id) ? " · demo data" : "");
     return `<div class="tile ${locked ? "locked" : ""} ${isOn || gOn ? "is-on" : ""}"><span class="t-ic">${ICON[a.id] || esc(a.name[0])}</span><span class="t-txt"><b>${esc(a.name)}</b><small>${note}</small></span>${ctl}</div>`;
