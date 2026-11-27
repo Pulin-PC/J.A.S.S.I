@@ -23,7 +23,7 @@ wHACKiest 2026 · Track 1: *Make MCP Matter* · Team J.A.S.S.I (MSRIT) — Round
 | **iPhone** | No download yet: [build it with Xcode](#iphone) or [add the web app to your Home Screen](#iphone) | iOS 17 or newer for the app |
 | **Any other device** (Linux, iPad, Chromebook…) | [Open the web app](https://jassi.pulin-chaudhari.workers.dev) | A modern browser (Chrome for voice) |
 
-All versions are on the [Releases page](https://github.com/Pulin-PC/J.A.S.S.I/releases). Every app signs in with Google and is **invite only**: ask the owner for an invite link first.
+All versions are on the [Releases page](https://github.com/Pulin-PC/J.A.S.S.I/releases). Windows builds: [Code signing policy](CODE_SIGNING_POLICY.md). Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/). Every app signs in with Google and is **invite only**: ask the owner for an invite link first.
 
 These are **test builds**: they are not signed with a store or developer identity, so your device warns you once. Install them only from this page.
 
