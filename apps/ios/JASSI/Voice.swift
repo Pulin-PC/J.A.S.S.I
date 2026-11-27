@@ -18,16 +18,20 @@ final class Listener {
         self.emit = emit
     }
 
-    func start(lang: String) -> [String: Any] {
-        finish(error: nil)
-        guard Permissions.mic == .granted, Permissions.speech == .granted else { return BridgeReply.fail("permission") }
+    /// `onDevice`: keep the audio on the iPhone when the recogniser can (the always-on wake word).
+    func start(lang: String, onDevice: Bool) -> [String: Any] {
+        discard()
+        // The web app looks for exactly this word to say the microphone is off.
+        guard Permissions.mic == .granted, Permissions.speech == .granted else { return BridgeReply.fail("no_permission") }
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: lang)), recognizer.isAvailable else {
             return BridgeReply.unsupported
         }
 
         let audio = AVAudioSession.sharedInstance()
         do {
-            try audio.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .defaultToSpeaker])
+            // The always-on wake word must not turn the user's music down; a tap on the mic may.
+            try audio.setCategory(.playAndRecord, mode: .measurement,
+                                  options: [onDevice ? .mixWithOthers : .duckOthers, .defaultToSpeaker])
             try audio.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
             return BridgeReply.fail("failed")
@@ -41,6 +45,7 @@ final class Listener {
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
+        if onDevice, recognizer.supportsOnDeviceRecognition { request.requiresOnDeviceRecognition = true }
         input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
             request.append(buffer)
@@ -78,13 +83,26 @@ final class Listener {
         return BridgeReply.ok
     }
 
+    /// Stops listening. The words heard so far arrive as a last `speech` event, then `speech-end`, a moment
+    /// later: if the page starts a new session straight away, the old one ends without a word (`discard`).
     func stop() -> [String: Any] {
-        finish(error: nil)
+        if let stopping = request {
+            Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(300))
+                guard let self, self.request === stopping else { return }
+                self.finish(error: nil)
+            }
+        }
         return BridgeReply.ok
     }
 
+    /// Drops the session, if one is running, without telling the page.
+    func discard() {
+        finish(error: nil, quietly: true)
+    }
+
     /// Ends the session, if one is running: the words so far become final, then `speech-end`.
-    private func finish(error: String?) {
+    private func finish(error: String?, quietly: Bool = false) {
         guard let request else { return }
         self.request = nil
         engine.stop()
@@ -93,6 +111,7 @@ final class Listener {
         task?.cancel()
         task = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if quietly { return }
         if error == nil, !sentFinal, !heard.isEmpty {
             emit(.speech(text: heard, final: true))
         }

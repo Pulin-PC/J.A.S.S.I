@@ -12,7 +12,7 @@ struct BridgeRouterTests {
     /// The method names in contract §2, in the contract's order.
     private let contractMethods = [
         "listApps", "permissions", "openPermission", "pair", "unpair", "setPolicy", "openExternal",
-        "biometric", "listenStart", "listenStop", "speak", "speakStop", "notify", "stop",
+        "biometric", "listenStart", "listenStop", "bubble", "speak", "speakStop", "notify", "stop",
     ]
 
     @Test func everyContractMethodExists() {
@@ -68,13 +68,20 @@ struct BridgeRouterTests {
     }
 
     @Test func voiceCallsDefaultToIndianEnglish() {
-        #expect(parse("listenStart") == .success(.listenStart(lang: "en-IN")))
-        #expect(parse("listenStart", ["lang": "hi-IN"]) == .success(.listenStart(lang: "hi-IN")))
-        #expect(parse("listenStart", ["lang": "en IN; rm"]) == .success(.listenStart(lang: "en-IN")))
+        #expect(parse("listenStart") == .success(.listenStart(lang: "en-IN", onDevice: false)))
+        #expect(parse("listenStart", ["lang": "hi-IN"]) == .success(.listenStart(lang: "hi-IN", onDevice: false)))
+        #expect(parse("listenStart", ["lang": "en IN; rm"]) == .success(.listenStart(lang: "en-IN", onDevice: false)))
         #expect(parse("speak", ["text": "Hello"]) == .success(.speak(text: "Hello", lang: "en-IN")))
         #expect(parse("speak", ["text": "नमस्ते", "lang": "hi-IN"]) == .success(.speak(text: "नमस्ते", lang: "hi-IN")))
         #expect(parse("speak", ["text": "   "]) == .failure(.badArgs))
         #expect(parse("speak") == .failure(.badArgs))
+    }
+
+    @Test func listeningStaysOnTheDeviceOnlyWhenAskedWithARealTrue() {
+        #expect(parse("listenStart", ["lang": "en-IN", "onDevice": true]) == .success(.listenStart(lang: "en-IN", onDevice: true)))
+        #expect(parse("listenStart", ["onDevice": false]) == .success(.listenStart(lang: "en-IN", onDevice: false)))
+        #expect(parse("listenStart", ["onDevice": "true"]) == .success(.listenStart(lang: "en-IN", onDevice: false)))
+        #expect(parse("listenStart", ["onDevice": 1]) == .success(.listenStart(lang: "en-IN", onDevice: false)))
     }
 
     @Test func biometricAndNotifyFillInWhatIsMissing() {
@@ -142,6 +149,13 @@ struct BridgeScriptTests {
             == #"[{"method":"speak","args":{"text":"Hi","lang":"en-IN"}},{"method":"openPermission","args":"mic"},{"method":"listApps","args":null}]"#)
     }
 
+    @Test func bubblePassesTextAndWhoThrough() {
+        let js = page(origin: origin.serialized)
+        #expect(call(js, "jassiNative.bubble({ visible: true, state: 'listening', text: 'pay Asha', who: 'you' })") == #"{"ok":true}"#)
+        #expect(js.evaluateScript("JSON.stringify(sent)").toString()
+            == #"[{"method":"bubble","args":{"visible":true,"state":"listening","text":"pay Asha","who":"you"}}]"#)
+    }
+
     @Test func neverThrowsOrRejects() {
         let js = page(origin: origin.serialized)
         // The shell refusing a call still resolves, with ok: false.
@@ -194,11 +208,19 @@ struct EventTests {
         #expect(queue.pageDidLoad() == [.auth(url: "jassi://auth?code=2")])
     }
 
+    @Test func aTapOnTheBubbleWaitsForThePage() {
+        var queue = EventQueue()
+        #expect(queue.submit(.bubble(.tap)) == nil)
+        #expect(queue.pageDidLoad() == [.bubble(.tap)])
+    }
+
     @Test func eventsHaveTheContractShape() throws {
         func json(_ event: NativeEvent) throws -> String {
             String(data: try JSONSerialization.data(withJSONObject: event.detail, options: .sortedKeys), encoding: .utf8)!
         }
         #expect(try json(.auth(url: "jassi://auth?code=test")) == #"{"type":"auth","url":"jassi:\/\/auth?code=test"}"#)
+        #expect(try json(.bubble(.tap)) == #"{"action":"tap","type":"bubble"}"#)
+        #expect(try json(.bubble(.dismissed)) == #"{"action":"dismissed","type":"bubble"}"#)
         #expect(try json(.ask(text: "Pay the rent")) == #"{"text":"Pay the rent","type":"ask"}"#)
         #expect(try json(.speech(text: "hello", final: true)) == #"{"final":true,"text":"hello","type":"speech"}"#)
         #expect(try json(.speechEnd(error: nil)) == #"{"type":"speech-end"}"#)

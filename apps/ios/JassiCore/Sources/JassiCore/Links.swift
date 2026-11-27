@@ -4,12 +4,19 @@ import Foundation
 public enum DeepLink: Equatable {
     /// `jassi://auth…`: the sign-in hand-off. The shell passes it on untouched.
     case auth(URL)
+    /// `jassi://talk`: a tap on the bubble (the Live Activity).
+    case talk
 
     public static let scheme = "jassi"
+    public static let talkURL = URL(string: "jassi://talk")!
 
     public static func parse(_ url: URL) -> DeepLink? {
-        guard url.scheme?.lowercased() == scheme, url.host?.lowercased() == "auth" else { return nil }
-        return .auth(url)
+        guard url.scheme?.lowercased() == scheme else { return nil }
+        switch url.host?.lowercased() {
+        case "auth": return .auth(url)
+        case "talk": return .talk
+        default: return nil
+        }
     }
 }
 

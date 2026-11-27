@@ -3,7 +3,7 @@ import Foundation
 /// Every method of `window.jassiNative` (contract §2). The names are the ones the web app calls.
 public enum BridgeMethod: String, CaseIterable, Sendable {
     case listApps, permissions, openPermission, pair, unpair, setPolicy, openExternal
-    case biometric, listenStart, listenStop, speak, speakStop, notify, stop
+    case biometric, listenStart, listenStop, bubble, speak, speakStop, notify, stop
 }
 
 public enum PermissionKind: String, CaseIterable, Sendable {
@@ -25,8 +25,9 @@ public enum BridgeCall: Equatable {
     case setPolicy(blockedApps: [String])
     case openExternal(URL)
     case biometric(reason: String)
-    case listenStart(lang: String)
+    case listenStart(lang: String, onDevice: Bool)
     case listenStop
+    case bubble(BubbleUpdate)
     case speak(text: String, lang: String)
     case speakStop
     case notify(title: String, body: String)
@@ -88,7 +89,11 @@ public enum BridgeRouter {
             return .success(.biometric(reason: text(fields["reason"]) ?? BridgeDefaults.biometricReason))
 
         case .listenStart:
-            return .success(.listenStart(lang: lang(fields["lang"])))
+            return .success(.listenStart(lang: lang(fields["lang"]), onDevice: flag(fields["onDevice"]) ?? false))
+
+        case .bubble:
+            guard let update = bubbleUpdate(fields) else { return .failure(.badArgs) }
+            return .success(.bubble(update))
 
         case .speak:
             guard let words = text(fields["text"]) else { return .failure(.badArgs) }
@@ -105,6 +110,38 @@ public enum BridgeRouter {
         guard let string = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
               !string.isEmpty else { return nil }
         return string
+    }
+
+    /// `{ visible?, state?, text?, who? }`. Left out (or null) is fine; a wrong value, or nothing at all, is not.
+    private static func bubbleUpdate(_ fields: [String: Any]) -> BubbleUpdate? {
+        func given(_ key: String) -> Any? {
+            let value = fields[key]
+            return value is NSNull ? nil : value
+        }
+        var update = BubbleUpdate()
+        if let value = given("visible") {
+            guard let visible = flag(value) else { return nil }
+            update.visible = visible
+        }
+        if let value = given("state") {
+            guard let state = (value as? String).flatMap(BubbleState.init(rawValue:)) else { return nil }
+            update.state = state
+        }
+        if let value = given("text") {
+            guard let words = value as? String else { return nil }
+            update.text = words
+        }
+        if let value = given("who") {
+            guard let who = (value as? String).flatMap(BubbleSpeaker.init(rawValue:)) else { return nil }
+            update.who = who
+        }
+        return update == BubbleUpdate() ? nil : update
+    }
+
+    /// A real `true` or `false`: a number such as 1 does not count.
+    private static func flag(_ value: Any?) -> Bool? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else { return nil }
+        return number.boolValue
     }
 
     /// A language tag such as "en-IN" or "hi-IN". Anything odd falls back to the default.

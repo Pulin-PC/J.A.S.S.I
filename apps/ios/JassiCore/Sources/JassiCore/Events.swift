@@ -30,6 +30,7 @@ public enum NativeEvent: Equatable {
     case speechEnd(error: String?)
     case auth(url: String)
     case ask(text: String)
+    case bubble(BubbleAction)
 
     public var detail: [String: Any] {
         switch self {
@@ -41,19 +42,21 @@ public enum NativeEvent: Equatable {
             return detail
         case .auth(let url): return ["type": "auth", "url": url]
         case .ask(let text): return ["type": "ask", "text": text]
+        case .bubble(let action): return ["type": "bubble", "action": action.rawValue]
         }
     }
 
-    /// Sign-in links and words handed in from outside must not be lost while the page is still loading.
+    /// Sign-in links, words handed in from outside and what the user did to the bubble must not be lost
+    /// while the page is still loading.
     var waitsForPage: Bool {
         switch self {
-        case .auth, .ask: return true
+        case .auth, .ask, .bubble: return true
         default: return false
         }
     }
 }
 
-/// Holds `auth` and `ask` events until the page has loaded (contract §2). Other events only matter live.
+/// Holds `auth`, `ask` and `bubble` events until the page has loaded (contract §2). Other events only matter live.
 public struct EventQueue {
     public private(set) var pageReady = false
     private var waiting: [NativeEvent] = []
@@ -70,7 +73,7 @@ public struct EventQueue {
         return waiting
     }
 
-    /// Returns the event if it should go to the page now. Otherwise it is kept (auth, ask) or dropped.
+    /// Returns the event if it should go to the page now. Otherwise it is kept (auth, ask, bubble) or dropped.
     public mutating func submit(_ event: NativeEvent) -> NativeEvent? {
         if pageReady { return event }
         if event.waitsForPage {

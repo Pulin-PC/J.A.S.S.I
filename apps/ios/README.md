@@ -11,7 +11,8 @@ Swift, SwiftUI + WKWebView, no third-party code. Needs iOS 17 or newer.
 | `openExternal(url)` | A sign-in page opens in the system sign-in sheet and comes back through `jassi://auth…`. That means J.A.S.S.I's own `/auth/…` pages, and another company's sign-in page that hands back to J.A.S.S.I (connecting Notion and the like). Any other link opens in Safari. |
 | `permissions()`, `openPermission(kind)` | Microphone, speech and alerts. Shows the system question the first time, opens Settings after that. The page is told when an answer changes. |
 | `biometric({ reason })` | Face ID or Touch ID. |
-| `listenStart` / `listenStop` | Speech-to-text, sending words as they are heard. Default language `en-IN`. The first time, it asks for the microphone and speech itself. |
+| `listenStart` / `listenStop` | Speech-to-text, sending words as they are heard. Default language `en-IN`. The first time, it asks for the microphone and speech itself. With `onDevice: true` (the "Jassi" wake word) the audio stays on the iPhone when the recogniser can do that. |
+| `bubble` | A Live Activity: the J.A.S.S.I orb in the Dynamic Island and on the Lock Screen, with the state and a one-line caption. Tapping it opens the app (`jassi://talk`); swiping it away tells the page. |
 | `speak` / `speakStop` | Reads text aloud. |
 | `notify({ title, body })` | A system alert. |
 | `listApps()` | Looks for 50 well-known apps and returns the ones found, with `partial: true`. |
@@ -19,15 +20,18 @@ Swift, SwiftUI + WKWebView, no third-party code. Needs iOS 17 or newer.
 | `setPolicy`, `stop` | Accepted, nothing to do. |
 | Siri / Shortcuts: "Ask J.A.S.S.I" | Opens the app and hands the words to the page as the `ask` event. |
 
+**The bubble on iPhone.** iOS allows no window over other apps, so the bubble is a Live Activity. It cannot loop animations; each state has its own still. It can only be started while the app is in front. iOS pauses the app soon after you leave it, so **on iPhone J.A.S.S.I does not hear "Jassi" from outside the app**: a bubble with no news for 30 seconds draws itself asleep, "Tap to talk". Rules for when it changes (at most one caption update a second, caption gone after 6 seconds) are in [`Bubble.swift`](JassiCore/Sources/JassiCore/Bubble.swift).
+
 **What an iPhone can't do.** Apple does not let any app read or control other apps. So `permissions().screen` is always `"unsupported"`, `openPermission("screen")` answers `{ ok: false, error: "unsupported" }`, and the app never runs the device channel (contract §4). Apple also does not let an app list the other apps on the phone, which is why `listApps()` can only check a fixed list ([`KnownApps.swift`](JassiCore/Sources/JassiCore/KnownApps.swift)).
 
 ## Where things are
 
 ```
 apps/ios/
-  JASSI.xcodeproj        the Xcode project (one app target, scheme "JASSI")
+  JASSI.xcodeproj        the Xcode project (the app and its widget extension, scheme "JASSI")
   Info.plist             permissions text, the jassi:// link, the app-link list
-  JASSI/                 the app: WebView, bridge, sign-in, voice, Face ID, alerts, Siri
+  JASSI/                 the app: WebView, bridge, sign-in, voice, Face ID, alerts, Siri, the bubble
+  JassiWidget/           how the bubble (Live Activity) looks
   JassiCore/             the rules that need no iPhone (a local Swift package) + their tests
   dev/                   a stand-in server and page for checking the bridge by hand
 ```
@@ -111,7 +115,7 @@ xcrun simctl openurl booted "jassi://auth?code=test"
 1. **Join the Apple Developer Program** ($99 a year, developer.apple.com). Nothing below is possible without it, not even installing on your own phone for more than a week.
 2. **Set the team and the app id.** In Xcode: the JASSI target → Signing & Capabilities → pick your team. The app id is `dev.workers.pulin-chaudhari.jassi`; change it now if you want a different one (also change the `simctl launch` commands above). It can't be changed after the first upload.
 3. **Read the permission questions.** These are the exact words the phone shows, in `Info.plist`. Apple rejects vague ones:
-   - Microphone (`NSMicrophoneUsageDescription`): "J.A.S.S.I listens when you tap the mic, so you can talk instead of typing."
+   - Microphone (`NSMicrophoneUsageDescription`): "J.A.S.S.I listens for its name while it is open, and when you tap the mic, so you can talk instead of typing."
    - Speech (`NSSpeechRecognitionUsageDescription`): "J.A.S.S.I turns what you say into words so it can understand you."
    - Face ID (`NSFaceIDUsageDescription`): "J.A.S.S.I uses Face ID to check it is really you before it does something important."
 4. **Test on a real iPhone.** The simulator can't prove Face ID on real hardware, Siri, real speech recognition, or which of the 50 apps are found. See "Not proven yet" below.
@@ -134,6 +138,10 @@ Apple rejects apps that are only a web page in a wrapper ("minimum functionality
 Honest view: this helps, but it is not a guarantee. The screen-control part of J.A.S.S.I, its main trick on Android and desktop, can't exist on iPhone, so the iPhone app is the lightest of the three. If Apple still says no, the usual fixes are more native pieces (a home-screen widget, a share-sheet action that sends text to J.A.S.S.I as an `ask`) rather than arguing.
 
 ## Not proven yet
+
+The bubble, checked in the simulator: all four states with a caption in the Dynamic Island, the Lock Screen card, tap opening the app (`tap` event), swiping it away (`dismissed` event), hide, and falling asleep after 30 quiet seconds. `listenStart({ onDevice: true })` with speech refused answers `no_permission`.
+
+The bubble and listening, still to check on a real iPhone: that "Jassi" is heard on the device, that music keeps its volume while it listens, the first-time "Allow Live Activities?" question, and the minimal view (it shows only when another app has a Live Activity too).
 
 Checked in the simulator (iPhone 17, iOS 27.2): the build, the tests, the live site loading, every bridge call that needs no tap, a frame being refused, outside links going to Safari, the can't-reach screen, and a `jassi://auth?code=test` link followed inside the app arriving as the `auth` event.
 

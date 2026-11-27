@@ -90,6 +90,12 @@ var taps = [
   ["Sign in", "openExternal", location.origin + "/auth/google/start?app=test", "signin"],
   ["Open a site", "openExternal", "https://example.com/", "site"],
   ["List apps", "listApps", undefined, "apps"],
+  ["Listen on device", "listenStart", { lang: "en-IN", onDevice: true }, "listendevice"],
+  ["Bubble: asleep", "bubble", { visible: true, state: "sleep", text: "" }, "sleep"],
+  ["Bubble: listening", "bubble", { visible: true, state: "listening", text: "pay Asha five hundred rupees", who: "you" }, "listening"],
+  ["Bubble: thinking", "bubble", { visible: true, state: "thinking", text: "pay Asha five hundred rupees", who: "you" }, "thinking"],
+  ["Bubble: speaking", "bubble", { visible: true, state: "speaking", text: "Sent 500 rupees to Asha. Anything else?", who: "jassi" }, "speaking"],
+  ["Bubble: hide", "bubble", { visible: false }, "hide"],
 ];
 taps.forEach(function (t) {
   var b = document.createElement("button");

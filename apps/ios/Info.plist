@@ -109,7 +109,9 @@
 	<key>NSFaceIDUsageDescription</key>
 	<string>J.A.S.S.I uses Face ID to check it is really you before it does something important.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>J.A.S.S.I listens when you tap the mic, so you can talk instead of typing.</string>
+	<string>J.A.S.S.I listens for its name while it is open, and when you tap the mic, so you can talk instead of typing.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>J.A.S.S.I turns what you say into words so it can understand you.</string>
 	<key>UIApplicationSceneManifest</key>

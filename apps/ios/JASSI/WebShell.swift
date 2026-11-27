@@ -18,6 +18,7 @@ final class WebShell: NSObject, ObservableObject {
     private let signIn = SignIn()
     private let speaker = Speaker()
     private lazy var listener = Listener { [weak self] event in self?.send(event) }
+    private lazy var bubble = Bubble { [weak self] event in self?.send(event) }
     private var lastPermissions: PermissionSnapshot?
     private var watcher: Task<Void, Never>?
 
@@ -43,6 +44,7 @@ final class WebShell: NSObject, ObservableObject {
         #if DEBUG
         webView.isInspectable = true
         #endif
+        _ = bubble // made now, so a bubble left from an earlier run is cleared before the page asks for one
         webView.load(URLRequest(url: AppConfig.baseURL))
     }
 
@@ -95,14 +97,17 @@ final class WebShell: NSObject, ObservableObject {
             return BridgeReply.ok
         case .biometric(let reason):
             return await Biometric.confirm(reason: reason)
-        case .listenStart(let lang):
+        case .listenStart(let lang, let onDevice):
+            listener.discard() // a session being replaced must not report into the new one
             // First use: show the system questions here, like a browser does, instead of failing.
             if Permissions.mic == .ask { await Permissions.open(.mic) }
             if Permissions.mic == .granted, Permissions.speech == .ask { await Permissions.open(.speech) }
             await checkPermissions()
-            return listener.start(lang: lang)
+            return listener.start(lang: lang, onDevice: onDevice)
         case .listenStop:
             return listener.stop()
+        case .bubble(let update):
+            return bubble.apply(update)
         case .speak(let text, let lang):
             return speaker.speak(text: text, lang: lang, whileListening: listener.isListening)
         case .speakStop:
@@ -131,7 +136,11 @@ final class WebShell: NSObject, ObservableObject {
     func setActive(_ active: Bool) {
         watcher?.cancel()
         watcher = nil
-        guard active else { return }
+        guard active else {
+            bubble.appWillLeave()
+            return
+        }
+        bubble.appBecameActive()
         watcher = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.checkPermissions()
@@ -150,10 +159,14 @@ final class WebShell: NSObject, ObservableObject {
 
     // MARK: Links
 
-    /// A link that opened the app. Only `jassi://auth…` means anything; it goes to the page untouched (contract §3).
+    /// A link that opened the app. `jassi://auth…` goes to the page untouched (contract §3);
+    /// `jassi://talk` is a tap on the bubble.
     func handleIncoming(_ url: URL) {
-        guard case .auth(let link)? = DeepLink.parse(url) else { return }
-        send(.auth(url: link.absoluteString))
+        switch DeepLink.parse(url) {
+        case .auth(let link): send(.auth(url: link.absoluteString))
+        case .talk: send(.bubble(.tap))
+        case nil: break
+        }
     }
 
     /// Words handed in from Siri or Shortcuts. Held until the page has loaded.
