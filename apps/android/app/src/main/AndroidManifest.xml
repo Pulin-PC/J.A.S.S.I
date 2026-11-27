@@ -6,6 +6,11 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- The floating bubble, and the service that keeps it and the hands-free microphone alive behind other apps. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <!-- Lets us see apps that have a launcher icon, without asking for every package on the phone. -->
@@ -55,6 +60,15 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".PresenceService"
+            android:exported="false"
+            android:foregroundServiceType="microphone|specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Floating assistant bubble the user can see, drag and dismiss over other apps" />
+        </service>
 
         <!-- Screen control. Off until the user switches it on under Settings → Accessibility. -->
         <service

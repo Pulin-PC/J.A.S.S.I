@@ -62,6 +62,10 @@ class Bridge(private val activity: MainActivity, private val web: WebView) {
     private fun onMessage(raw: String, reply: JavaScriptReplyProxy) {
         val msg = try { JSONObject(raw) } catch (_: JSONException) { return }
         if (msg.has("hello")) {
+            if (page != null) {   // a fresh page: what the old one asked for no longer applies
+                activity.voice.cancel()
+                Presence.end()
+            }
             page = reply
             while (waiting.isNotEmpty()) send(reply, JSONObject().put("event", waiting.removeFirst()))
             return
@@ -112,10 +116,11 @@ class Bridge(private val activity: MainActivity, private val web: WebView) {
             }
             "notify" -> done(Notify.show(activity, o.optString("title"), o.optString("body")))
             "biometric" -> Biometric.ask(activity, o.optString("reason"), done)
-            "listenStart" -> done(activity.voice.listenStart(o.optString("lang").ifBlank { null }))
+            "listenStart" -> done(activity.voice.listenStart(o.optString("lang").ifBlank { null }, o.optBoolean("onDevice")))
             "listenStop" -> done(activity.voice.listenStop())
             "speak" -> activity.voice.speak(o.optString("text"), o.optString("lang").ifBlank { null }, done)
             "speakStop" -> done(activity.voice.speakStop())
+            "bubble" -> done(Presence.bubble(activity, o))
             "stop" -> {
                 ScreenService.instance?.stopFromWeb()
                 done(ok())

@@ -39,7 +39,7 @@
 
   var api = { platform: "android", version: "__VERSION__", contract: 1 };
   ["listApps", "permissions", "openPermission", "pair", "unpair", "setPolicy", "openExternal", "biometric",
-   "listenStart", "listenStop", "speak", "speakStop", "notify", "stop"].forEach(function (name) {
+   "listenStart", "listenStop", "speak", "speakStop", "notify", "stop", "bubble"].forEach(function (name) {
     api[name] = function (args) { return call(name, args); };
   });
   Object.defineProperty(window, "jassiNative", { value: Object.freeze(api), writable: false, configurable: false });

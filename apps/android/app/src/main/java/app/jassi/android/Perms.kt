@@ -24,6 +24,7 @@ object Perms {
         .put("mic", mic(activity))
         .put("speech", if (SpeechRecognizer.isRecognitionAvailable(activity)) mic(activity) else "unsupported")
         .put("notifications", notifications(activity))
+        .put("overlay", if (Settings.canDrawOverlays(activity)) "granted" else "ask")
 
     /** True when the user has switched on J.A.S.S.I under Accessibility. */
     fun screenOn(context: Context): Boolean {
@@ -59,6 +60,10 @@ object Perms {
             .putExtra(":settings:show_fragment_args", Bundle().apply { putString(":settings:fragment_args_key", me) })
         return start(context, ourPage) || start(context, list)
     }
+
+    /** "Display over other apps", for the floating bubble. Newer Android shows the list instead of our own page. */
+    fun openOverlaySettings(context: Context) =
+        start(context, Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.fromParts("package", context.packageName, null)))
 
     fun openAppSettings(context: Context) =
         start(context, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))

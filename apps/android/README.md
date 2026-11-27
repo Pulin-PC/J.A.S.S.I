@@ -46,6 +46,8 @@ curl -s -X POST localhost:8787/dev/op -d '{"op":"screen_act","args":{"action":"t
 | `DeviceChannel.kt`, `Backoff.kt` | The long-poll loop of contract §4, in native code. |
 | `Policy.kt`, `Nodes.kt`, `Origins.kt` | The safety rules as plain logic (unit tested). |
 | `Vault.kt` | Pairing token, encrypted with a key held in the Android Keystore. |
+| `Presence.kt`, `Bubble.kt`, `BubbleViews.kt`, `BubbleGeometry.kt` | The floating bubble, its bin and caption (needs "Display over other apps", `openPermission("overlay")`), owned by a foreground service. |
+| `QuietMic.kt`, `Voice.kt` | Hands-free (`listenStart({ onDevice: true })`): on-device recogniser only (Android 12+), microphone held by the same service, silence restarted inside the app. |
 | `Apps.kt`, `Perms.kt`, `Notify.kt`, `Voice.kt`, `Biometric.kt`, `External.kt` | The rest of the bridge methods. |
 
 ## Safety rules (contract §4) and where they live

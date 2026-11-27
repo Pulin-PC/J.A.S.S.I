@@ -138,6 +138,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        Presence.appOpened(this)
         ticker.removeCallbacks(tick)
         tick.run()
     }
@@ -152,6 +153,7 @@ class MainActivity : FragmentActivity() {
         val text = now.toString()
         if (lastPermissions != null && lastPermissions != text) {
             bridge.event(JSONObject().put("type", "permission").put("permissions", now))
+            Presence.sync(this)
         }
         lastPermissions = text
     }
@@ -159,6 +161,7 @@ class MainActivity : FragmentActivity() {
     /** Shows the system prompt, or the settings page when Android will not prompt any more. */
     fun openPermission(kind: String): JSONObject {
         when (kind) {
+            "overlay" -> if (!Perms.openOverlaySettings(this)) return fail("failed")
             "screen" -> if (!Perms.openScreenSettings(this)) return fail("failed")
             "mic", "speech" -> {
                 if (kind == "speech" && Perms.snapshot(this).optString("speech") == "unsupported") return fail("unsupported")
@@ -195,6 +198,7 @@ class MainActivity : FragmentActivity() {
         if (Shell.bridge === bridge) Shell.bridge = null
         if (Shell.activity === this) Shell.activity = null
         voice.shutDown()
+        Presence.end()
         web.destroy()
         super.onDestroy()
     }

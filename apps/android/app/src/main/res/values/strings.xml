@@ -9,4 +9,9 @@
     <string name="screen_service_description">When you ask J.A.S.S.I to do something in another app, it reads what is on your screen as text and taps, types and scrolls for you.\n\nIt never opens or reads banking, payment, ID, password or health-record apps. It never reads or types passwords. It does not act on Settings, permission or install screens. It takes no screenshots, and nothing it reads is saved on this phone.\n\nWhat it reads is sent to the J.A.S.S.I server to work out the next step.\n\nWhile it is working you see “J.A.S.S.I is working · Stop” at the top of the screen. Touch the screen or tap Stop and it stops at once. You can switch this off here at any time.</string>
     <string name="confirm_its_you">Confirm it\'s you</string>
     <string name="cancel">Cancel</string>
+    <string name="presence">Bubble and hands-free</string>
+    <string name="listening_for_jassi">J.A.S.S.I is listening for “Jassi”</string>
+    <string name="bubble_on">The J.A.S.S.I bubble is on</string>
+    <string name="turn_off">Turn off</string>
+    <string name="bubble_label">J.A.S.S.I: tap to talk, drag to move, drop on the bin to hide</string>
 </resources>
